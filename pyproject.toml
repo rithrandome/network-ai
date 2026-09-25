@@ -1,0 +1,14 @@
+[project]
+name = "network-ai"
+version = "0.1.0"
+description = "network-ai - a context-first networking assistant for job seekers"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "langchain>=0.3",
+    "langchain-ollama>=0.2",
+    "requests>=2.32",
+    "python-dotenv>=1.0",
+    "pydantic>=2.7",
+    "streamlit>=1.38",
+]

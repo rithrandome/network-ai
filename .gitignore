@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Exa response cache - real people's data, keep local only
+.cache/
