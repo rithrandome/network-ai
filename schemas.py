@@ -34,3 +34,12 @@ class Candidate(BaseModel):
     def current_role(self) -> Role | None:
         return self.roles[0] if self.roles else None
 
+
+class Brief(BaseModel):
+    """What you need to know about the person before reaching out."""
+
+    summary: str = Field(description="A short, plain-language summary of who the person is")
+    facts: list[str] = Field(description="Two specific, interesting facts taken from the profile")
+    icebreakers: list[str] = Field(
+        description="Two conversation openers that reference something specific in the profile"
+    )
