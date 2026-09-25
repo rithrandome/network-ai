@@ -1,0 +1,47 @@
+{
+  "requestId": "mock",
+  "results": [
+    {
+      "title": "Jane Doe",
+      "url": "https://www.linkedin.com/in/jane-doe-mock",
+      "text": "# Jane Doe\n\nBuilding ML systems that ship, not just notebooks\n\nToronto, Ontario, Canada (CA)\n\n500 connections • 2,140 followers\n\n## About\n\nML engineer with 8 years of experience taking models from research to production, focused on recommendation systems and MLOps tooling.\n\n## Experience\n\n### Senior Machine Learning Engineer - Northwind Analytics\n2022 - Present\nLeads the recommendations platform team, rebuilt the feature store to cut retraining time by 60%.\n\n### Machine Learning Engineer - Cascade Retail Co.\n2018 - 2022\nBuilt the first personalization models for the company's e-commerce site.\n\n## Education\n\n### University of Waterloo\nB.Math, Computer Science",
+      "entities": [
+        {
+          "type": "person",
+          "properties": {
+            "name": "Jane Doe",
+            "firstName": "Jane",
+            "lastName": "Doe",
+            "location": "Toronto, Ontario, Canada",
+            "workHistory": [
+              {"title": "Senior Machine Learning Engineer", "dates": {"from": "2022", "to": null}, "company": {"name": "Northwind Analytics"}},
+              {"title": "Machine Learning Engineer", "dates": {"from": "2018", "to": "2022"}, "company": {"name": "Cascade Retail Co."}}
+            ],
+            "educationHistory": [
+              {"degree": "B.Math, Computer Science", "institution": {"name": "University of Waterloo"}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "title": "Jane Doe",
+      "url": "https://www.linkedin.com/in/janedoe-recruiting-mock",
+      "text": "# Jane Doe\n\nTechnical Recruiter at Fabrikam | Hiring engineers across Canada\n\nVancouver, British Columbia, Canada (CA)\n\n## About\n\nI help engineers find teams where they do their best work.\n\n## Experience\n\n### Senior Technical Recruiter - Fabrikam\n2021 - Present",
+      "entities": [
+        {
+          "type": "person",
+          "properties": {
+            "name": "Jane Doe",
+            "location": "Vancouver, British Columbia, Canada",
+            "workHistory": [
+              {"title": "Senior Technical Recruiter", "dates": {"from": "2021", "to": null}, "company": {"name": "Fabrikam"}}
+            ],
+            "educationHistory": []
+          }
+        }
+      ]
+    }
+  ],
+  "costDollars": {"total": 0}
+}
