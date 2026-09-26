@@ -1,9 +1,9 @@
 """
 network-ai pipeline: describe a person -> pick the right candidate -> brief.
 
-  find_candidates(name, company, location, hint)
-      Exa people search -> candidate profiles (the user picks one; same-name
-      matches are normal)
+  find_candidates(query)
+      free-text description -> Exa people search -> candidate profiles (the
+      user picks one; same-name matches are normal)
   write_brief(candidate)
       full profile markdown -> local Ollama model -> Brief (summary, facts,
       icebreakers), schema-constrained so the UI can render each part
@@ -45,10 +45,10 @@ Profile:
 """
 
 
-def find_candidates(name: str, company: str = "", location: str = "", hint: str = "",
-                    mode: str | None = None) -> list[Candidate]:
-    """mode overrides EXA_MODE: live | offline | mock."""
-    return find_person(name, company, location, hint, mode=mode)
+def find_candidates(query: str, mode: str | None = None) -> list[Candidate]:
+    """query is free text, e.g. "Ashutosh Mishra, Tampa, Capgemini, Citi".
+    mode overrides EXA_MODE: live | offline | mock."""
+    return find_person(query, mode=mode)
 
 
 def write_brief(candidate: Candidate) -> Brief:
@@ -62,7 +62,7 @@ def write_brief(candidate: Candidate) -> Brief:
 
 
 if __name__ == "__main__":
-    candidates = find_candidates("Jane Doe", company="Northwind Analytics")
+    candidates = find_candidates("Jane Doe, Northwind Analytics")
     chosen = candidates[0]
     print(f"Chose: {chosen.name} - {chosen.headline}\n")
     print(write_brief(chosen).model_dump_json(indent=2))

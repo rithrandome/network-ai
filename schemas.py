@@ -10,16 +10,12 @@ class Role(BaseModel):
     end: str | None = None  # None means current
 
 
-class Education(BaseModel):
-    institution: str | None = None
-    degree: str | None = None
-
-
 class Candidate(BaseModel):
     """One possible match for the person being looked up.
 
     Resolution returns several of these because same-name matches are normal,
-    even with a company in the query - the user picks the right one.
+    even with a company in the query - the user picks the right one. Education
+    isn't a field: the SDK drops it from the entity, but it's in profile_text.
     """
 
     name: str
@@ -27,7 +23,6 @@ class Candidate(BaseModel):
     headline: str | None = None
     location: str | None = None
     roles: list[Role] = Field(default_factory=list)
-    education: list[Education] = Field(default_factory=list)
     profile_text: str = Field(default="", description="Full profile page as markdown - input to the brief")
 
     @property

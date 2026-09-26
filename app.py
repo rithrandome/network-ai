@@ -19,25 +19,21 @@ else:
     st.caption("Live Exa people search - about $0.007 per new lookup; repeated lookups come from the local cache for free.")
 
 with st.form("lookup"):
-    name = st.text_input("Full name")
-    col1, col2 = st.columns(2)
-    company = col1.text_input("Company", placeholder="optional")
-    location = col2.text_input("Location", placeholder="optional")
-    hint = st.text_input("Anything else you know", placeholder="optional - e.g. 'technical recruiter', 'Georgia Tech alum'")
+    query = st.text_input("Who are you looking for?", label_visibility="collapsed",
+                          placeholder="Name plus anything you know - e.g. Ashutosh Mishra, Tampa, Capgemini, Citi")
     submitted = st.form_submit_button("Find", type="primary")
 
-if submitted and name:
-    with st.spinner(f"Looking up {name}..."):
+if submitted and query.strip():
+    with st.spinner("Searching..."):
         try:
-            st.session_state.candidates = find_candidates(name, company, location, hint,
-                                                          mode="mock" if use_mock else None)
+            st.session_state.candidates = find_candidates(query, mode="mock" if use_mock else None)
             st.session_state.pop("brief", None)
         except Exception as exc:
             st.error(f"Lookup failed: {exc}")
 
 candidates = st.session_state.get("candidates")
 if candidates == []:
-    st.warning("No profiles found - try adding a company or location.")
+    st.warning("No profiles found - try adding where they work or live.")
 elif candidates:
     st.subheader("Which one?")
     labels = []
