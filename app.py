@@ -1,5 +1,7 @@
 """Streamlit front end for network-ai."""
 
+import os
+
 import streamlit as st
 
 from pipeline import find_candidates, write_brief
@@ -8,7 +10,13 @@ st.set_page_config(page_title="network-ai", page_icon="🤝")
 st.title("network-ai 🤝")
 st.caption("Describe someone you want to reach out to, pick the right profile, get a brief.")
 
-use_mock = st.toggle("Use mock data (no API key, no search credit)", value=True)
+has_exa_key = bool(os.environ.get("EXA_API_KEY"))
+use_mock = st.toggle("Use mock data (fictional profiles, no search credit)", value=not has_exa_key,
+                     disabled=not has_exa_key)
+if use_mock:
+    st.caption("Searching the mock fixture." + ("" if has_exa_key else " Add EXA_API_KEY to .env for real search."))
+else:
+    st.caption("Live Exa people search - about $0.007 per new lookup; repeated lookups come from the local cache for free.")
 
 with st.form("lookup"):
     name = st.text_input("Full name")

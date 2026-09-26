@@ -51,7 +51,7 @@ uv sync
 cp .env.example .env        # add EXA_API_KEY to look up real people
 
 EXA_MODE=mock uv run python pipeline.py      # CLI, fictional data, no keys
-uv run streamlit run app.py                  # app; mock toggle is on by default
+uv run streamlit run app.py                  # app; live search if EXA_API_KEY is set, else mock
 uv run python -m sources.exa_client "Name" --company X   # candidate lookup only
 ```
 
