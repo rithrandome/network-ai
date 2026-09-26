@@ -11,4 +11,5 @@ dependencies = [
     "pydantic>=2.7",
     "streamlit>=1.38",
     "exa-py>=2.22.2",
+    "langchain-anthropic>=1.7.4",
 ]

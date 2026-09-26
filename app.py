@@ -4,11 +4,13 @@ import os
 
 import streamlit as st
 
+from llm import describe
 from pipeline import find_candidates, write_brief
 
 st.set_page_config(page_title="network-ai", page_icon="🤝")
 st.title("network-ai 🤝")
 st.caption("Describe someone you want to reach out to, pick the right profile, get a brief.")
+st.caption(f"Model: {describe()}")
 
 has_exa_key = bool(os.environ.get("EXA_API_KEY"))
 use_mock = st.toggle("Use mock data (fictional profiles, no search credit)", value=not has_exa_key,

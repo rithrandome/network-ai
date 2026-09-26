@@ -17,7 +17,7 @@ one free-text description
   --> Exa people search        -> up to 10 candidate profiles (full profile markdown
                                   + structured work history), via exa-py
   --> you pick the right one    (same-name matches are normal)
-  --> local Ollama model        -> Brief {summary, facts, icebreakers},
+  --> chat model (llm.py)       -> Brief {summary, facts, icebreakers},
                                   Pydantic-constrained
   --> Streamlit UI
 ```
@@ -54,8 +54,16 @@ education the API returns - so it's only used for the one-line candidate label.
 lookup never spends credit twice. `EXA_MODE=offline` guarantees no spend while
 developing; `EXA_MODE=mock` uses a fictional fixture with no key at all.
 
-**Local Ollama for generation.** No API cost; `num_ctx` is raised to 8192
-because Ollama's default 2048-token window silently truncates a full profile.
+**Models by role, local by default.** Steps ask `llm.py` for an `extract` or
+`compose` model, not a model name. `LLM_PROVIDER=ollama` (default) runs
+everything on a local model at no cost; `anthropic` uses Haiku for extraction
+and Sonnet for writing drafts, where quality is the product. Both backends use
+constrained decoding (`method="json_schema"`: Ollama's format parameter,
+Claude's native structured outputs), so the schema is enforced while
+generating - a 1B model given format instructions in the prompt echoes the
+schema instead of filling it in. No temperature is passed to Claude: Sonnet 5
+rejects sampling parameters. Ollama's `num_ctx` is raised to 8192 because its
+default 2048-token window silently truncates a full profile.
 
 ## Run it
 
@@ -74,6 +82,7 @@ uv run python -m sources.exa_client "Name, company, city"   # candidate lookup o
 ## Files
 
 - `pipeline.py` - `find_candidates()` and `write_brief()`
+- `llm.py` - model per role, Ollama or Claude, structured output
 - `sources/exa_client.py` - Exa people search (exa-py), cache/offline/mock modes
 - `schemas.py` - `Candidate`, `Role`, `Brief`
 - `mock_data/exa_people_search.json` - fictional Exa response (two Jane Does)

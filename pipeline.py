@@ -5,32 +5,20 @@ network-ai pipeline: describe a person -> pick the right candidate -> brief.
       free-text description -> Exa people search -> candidate profiles (the
       user picks one; same-name matches are normal)
   write_brief(candidate)
-      full profile markdown -> local Ollama model -> Brief (summary, facts,
+      full profile markdown -> chat model -> Brief (summary, facts,
       icebreakers), schema-constrained so the UI can render each part
 
-Runs against a local Ollama model (default: gemma3:1b) - set OLLAMA_MODEL in
-.env to point at a different one.
+The model comes from llm.py: local Ollama by default, Claude with
+LLM_PROVIDER=anthropic.
 
 Run:  EXA_MODE=mock uv run python pipeline.py
 """
 
-import os
-
-from dotenv import load_dotenv
 from langchain_core.prompts import PromptTemplate
-from langchain_ollama import ChatOllama
 
+from llm import structured
 from schemas import Brief, Candidate
 from sources.exa_client import find_person
-
-load_dotenv()
-
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:1b")
-
-# Ollama's default context window is 2048 tokens and it truncates silently -
-# a full profile runs 3-4k tokens, so without this the model never sees
-# most of the Experience section.
-CONTEXT_TOKENS = 8192
 
 BRIEF_TEMPLATE = """
 Below is a person's professional profile. Produce:
@@ -53,11 +41,10 @@ def find_candidates(query: str, mode: str | None = None) -> list[Candidate]:
 
 def write_brief(candidate: Candidate) -> Brief:
     prompt = PromptTemplate(input_variables=["profile"], template=BRIEF_TEMPLATE)
-    llm = ChatOllama(model=OLLAMA_MODEL, temperature=0, num_ctx=CONTEXT_TOKENS)
-    # json_schema = Ollama's constrained decoding: the schema is enforced at
-    # generation time. Format instructions in the prompt aren't enough for a
-    # 1B model - it echoes the schema's shape instead of filling it in.
-    chain = prompt | llm.with_structured_output(Brief, method="json_schema")
+    # Constrained decoding (see llm.py): format instructions in the prompt
+    # aren't enough for a 1B model - it echoes the schema's shape instead of
+    # filling it in.
+    chain = prompt | structured("extract", Brief)
     return chain.invoke({"profile": candidate.profile_text})
 
 
