@@ -1,0 +1,40 @@
+ALEX TESTER
+Machine Learning Engineer
+Toronto, ON | alex.tester@example.com | linkedin.com/in/alex-tester-example
+
+SUMMARY
+ML engineer who ships LLM features to production. Background in cloud application
+development and applied machine learning.
+
+EXPERIENCE
+
+Associate Consultant, Application Development
+Contoso Cloud Services - Toronto, ON
+Aug 2023 - Oct 2024
+• Built a natural-language-to-SQL chatbot on AWS Bedrock Agents that reached ~90% query accuracy
+• Partitioned two Bedrock knowledge bases by resource type, cutting latency 30% and tokens 25%
+• Added a validator agent and an error-retry loop so failed queries were corrected automatically
+• Built chunked browser uploads for multi-gigabyte training data files for a retail client
+
+Software Engineering Intern
+Fabrikam Analytics - Waterloo, ON
+May 2022 - Aug 2022
+• Wrote Python ETL jobs that moved 2M daily events into the analytics warehouse
+• Cut dashboard load time from 9s to 2s by adding pre-aggregated tables
+
+PROJECTS
+
+LangChain Docs Assistant | Python, Pinecone, Ollama
+• RAG chatbot over the LangChain documentation with cited answers
+• Gated retrieval with a cosine-similarity threshold so off-topic questions are refused
+
+Optimizer Ablation Study | PyTorch, Georgia Tech CS7641
+• Compared seven optimizers from SGD to AdamW on a forest cover classification task
+• Implemented randomized hill climbing and simulated annealing for neural network weights in NumPy
+
+EDUCATION
+Georgia Institute of Technology - MS Computer Science (OMSCS), 2026 - present
+University of Toronto - BSc Computer Science, 2019 - 2023
+
+SKILLS
+Python, PyTorch, scikit-learn, LangChain, AWS Bedrock, SQL, Streamlit, Docker

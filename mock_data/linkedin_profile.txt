@@ -1,0 +1,32 @@
+Contact
+www.linkedin.com/in/alex-tester-example (LinkedIn)
+Top Skills
+Retrieval-Augmented Generation (RAG)
+Amazon Bedrock
+PyTorch
+Certifications
+AWS Certified Machine Learning - Specialty
+Alex Tester
+Machine Learning Engineer | LLM agents, RAG
+Toronto, Ontario, Canada
+Summary
+I build LLM features that hold up in production - agents, retrieval, evaluation.
+Experience
+Contoso Cloud Services
+Associate Consultant
+August 2023 - October 2024 (1 year 3 months)
+Toronto, Ontario, Canada
+Built a natural-language-to-SQL chatbot on AWS Bedrock Agents that reached about 90%
+query accuracy. Partitioned the knowledge bases by resource type, which cut latency 30%.
+Page 1 of 2
+Fabrikam Analytics
+Software Engineering Intern
+May 2022 - August 2022 (4 months)
+Waterloo, Ontario, Canada
+Wrote Python ETL jobs that moved 2M daily events into the analytics warehouse.
+Education
+Georgia Institute of Technology
+Master of Science - MS, Computer Science · (January 2026)
+University of Toronto
+Bachelor of Science - BS, Computer Science · (2019 - 2023)
+Page 2 of 2

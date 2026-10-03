@@ -46,18 +46,75 @@ class Brief(BaseModel):
 
 # --- You ---------------------------------------------------------------------
 
+class Entry(BaseModel):
+    """One job or project - the unit the user deepens over time.
+
+    The upload fills title/org/dates/bullets; `story` is the walkthrough the
+    resume has no room for (the problem, the decisions, the result). It's
+    optional and asked for when a draft is about to use this entry.
+    """
+
+    kind: Literal["job", "project"] = "job"
+    title: str = ""
+    org: str = Field(default="", description="Company for a job; course, client or 'Personal' for a project")
+    location: str = ""
+    start: str = ""
+    end: str = ""
+    bullets: list[str] = Field(default_factory=list)
+    unverified: list[str] = Field(default_factory=list,
+                                  description="Bullets the reader couldn't find in the source - not offered until kept")
+    story: str = ""
+
+    @property
+    def key(self) -> str:
+        return f"{self.kind}:{self.org}:{self.title}".lower()
+
+    @property
+    def label(self) -> str:
+        if self.kind == "job":
+            return " at ".join(p for p in (self.title, self.org) if p) or "Untitled role"
+        return f"{self.title} ({self.org})" if self.org else (self.title or "Untitled project")
+
+    @property
+    def offered(self) -> list[str]:
+        return [b for b in self.bullets if b not in self.unverified]
+
+
+class Education(BaseModel):
+    school: str = ""
+    degree: str = Field(default="", description="e.g. B.Math, MS")
+    field: str = Field(default="", description="e.g. Computer Science")
+    start: str = ""
+    end: str = ""
+
+
 class Me(BaseModel):
-    """The sender. Set once on the Me page; shared by every instance."""
+    """The sender, built from an uploaded resume or LinkedIn PDF and deepened
+    over time. Shared by every instance."""
 
     name: str = ""
     headline: str = ""
+    location: str = ""
+    summary: str = ""
+    entries: list[Entry] = Field(default_factory=list)
+    education: list[Education] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
     highlights: list[str] = Field(default_factory=list,
-                                  description="Achievements to draw credibility from, one per item")
-    resume_text: str = ""
+                                  description="Extra achievements typed by hand, one per item")
+    resume_text: str = Field(default="", description="Text of the last upload - the source bullets are checked against")
+    source: str = ""
 
     @property
     def first_name(self) -> str:
         return self.name.split()[0] if self.name.strip() else ""
+
+    def credibility_items(self) -> list[str]:
+        """Everything that can be picked as credibility: checked bullets, then hand-typed highlights."""
+        items = [b for entry in self.entries for b in entry.offered] + self.highlights
+        return list(dict.fromkeys(i for i in items if i.strip()))
+
+    def entry_for(self, item: str) -> Entry | None:
+        return next((e for e in self.entries if item in e.bullets), None)
 
 
 # --- The role ------------------------------------------------------------------
