@@ -6,6 +6,9 @@ Capgemini, Citi") - pick the right profile from the candidates, say what the rea
 and get a draft message built from the context you chose - then keep tweaking
 it in a playground that's saved until you delete it.
 
+You start by uploading your resume or LinkedIn PDF; it becomes your profile,
+and its bullets become what drafts can cite about you.
+
 Each person is an **instance**, like a chat session: the person, a brief, the
 knobs (goal, who they are to you, channel, tone, what goes in), and every draft
 version. A tracker comes next.
@@ -13,6 +16,10 @@ version. A tracker comes next.
 ## Pipeline
 
 ```
+once: resume / LinkedIn PDF -> sections split in code -> one small extraction per
+      section -> bullets verified against the file -> review screen -> profile
+      (stories added later, when a draft is about to use an entry)
+
 one free-text description
   --> Exa people search        -> up to 10 candidate profiles (full profile markdown
                                   + structured work history), via exa-py
@@ -83,6 +90,34 @@ something only you know - is Off, Hint (alluded to), Mention (stated) or Lead
 (the opening is built on it; only one leads). Implicit vs explicit is a real
 choice in outreach: common ground often works better hinted at than announced.
 
+**Upload first, depth later.** A setup form asking for your whole career up
+front is where people quit, so the profile is built from a file you already
+have and is useful immediately. Depth comes later and is optional: each
+job or project has a "story" (the problem, the decision, the result - what a
+resume has no room for). The app asks for a story at the moment it pays off:
+when a draft's credibility item comes from an entry without one. A strength
+meter starts around 60% after an upload and names the next story worth
+adding. The frameworks behind this: time-to-value, progressive profiling, Fogg's
+B=MAP (ask when motivation is highest), and endowed progress.
+
+**Code reads the structure; the model fills small schemas.** A 1B model asked
+for a whole resume as JSON drops jobs. So code splits the document by its
+headings, the model extracts one section at a time against a small schema with a
+worked example, and code checks the result: every bullet must be found in the
+file (fuzzy match), or it's flagged for you to keep or drop. If some source
+lines aren't covered by anything extracted, that region is read again starting
+at the missed item (at most twice). A title that isn't in the file (a bullet
+put in the title slot) is repaired from its company's line. A re-upload
+replaces what came from the file and keeps your stories and edits.
+
+**The profile reaches drafts as facts, not as a resume.** Your bullets are
+ranked by word overlap with the job's requirements (weighted double) and the
+recipient's profile, and the top one is preselected. A picked bullet goes to
+the compose model with where it's from and, if you wrote one, its story as
+background - "say why it matters, in a phrase, never retell it". Shared
+employers, schools and city are matched in code and listed ahead of the
+model's common ground.
+
 **Suggestions that don't push.** One model call after the goal guesses who the
 person is to you and offers common ground, hooks and ask wordings, all marked
 ✦. Open suggestions start unselected. The raw output isn't trusted: on a 1B
@@ -134,11 +169,13 @@ uv run python -m sources.exa_client "Name, company, city"   # candidate lookup o
 
 ## Files
 
-- `app.py` - Streamlit: instance sidebar, + New flow, playground, Me page
+- `app.py` - Streamlit: instance sidebar, + New flow, playground
+- `me_page.py` - upload -> review -> deepen; strength meter
 - `knob_ui.py` - the knob widgets, shared by the New flow and the playground sidebar
 - `knobs.py` - knob registry: settings, ingredients, levels, channels, goal rules
 - `pipeline.py` - `find_candidates()`, `write_brief()`, knob seeding and goal changes
 - `suggest.py` - the suggestions call and the code filter on its output
+- `profile_match.py` - credibility ranking and code-matched common ground
 - `prompts.py` - fixed system prompt, `MessagePlan`, `render()`
 - `compose.py` - knobs -> plan -> draft, with the validate/retry loop
 - `validators.py` - the deterministic checks
@@ -146,5 +183,7 @@ uv run python -m sources.exa_client "Name, company, city"   # candidate lookup o
 - `llm.py` - model per role, Ollama or Claude, structured output
 - `sources/exa_client.py` - Exa people search and page fetch (exa-py), cache/offline/mock modes
 - `sources/job_posting.py` - job link or pasted JD -> `JobPosting`
+- `sources/resume.py` - resume / LinkedIn PDF, DOCX or text -> `Me` (`uv run python -m sources.resume file.pdf`)
 - `schemas.py` - the data models
-- `mock_data/` - fictional Exa response (two Jane Does) and a fictional job posting
+- `mock_data/` - fictional Exa response (two Jane Does), a fictional job posting, and a
+  fictional resume and LinkedIn profile (Alex Tester) - "Use the sample resume" on the Me page

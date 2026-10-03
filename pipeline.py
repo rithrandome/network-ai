@@ -21,6 +21,7 @@ from langchain_core.prompts import PromptTemplate
 
 from knobs import DEFAULT_SETTINGS, INGREDIENT_KEYS, default_levels, rule_for
 from llm import structured
+from profile_match import rank_credibility
 from schemas import Brief, Candidate, IngredientState, Instance, JobPosting, Me
 from sources.exa_client import find_person
 
@@ -77,10 +78,11 @@ def seed_knobs(instance: Instance, me: Me) -> Instance:
     for key in INGREDIENT_KEYS:
         instance.ingredients.setdefault(key, IngredientState(level=levels[key]))
 
-    # Your own highlights and the JD aren't guesses - start them selected.
+    # Your own most relevant achievement and the JD aren't guesses - start them selected.
     credibility = instance.ingredients["credibility"]
-    if not credibility.items and me.highlights:
-        credibility.items = [me.highlights[0]]
+    ranked = rank_credibility(me, instance)
+    if not credibility.items and ranked:
+        credibility.items = [ranked[0]]
     role = instance.ingredients["role"]
     if not role.items and instance.job:
         role.items = [role_item(instance.job.posting)]

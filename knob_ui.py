@@ -15,9 +15,11 @@ import streamlit as st
 from knobs import (CHANNEL, CHANNELS, GOAL, INGREDIENTS, LEVEL_LABELS, LEVELS, ROLE_STATUSES, STATUS,
                    THEIR_ROLE, TONE, Ingredient, Setting, rule_for, warnings_for)
 from pipeline import change_goal, role_item
+from profile_match import rank_credibility
 from schemas import IngredientState, Instance, Me
 from sources.exa_client import PageUnreadable
 from sources.job_posting import read_job
+from store import save_me
 
 CUSTOM_OK = {"goal", "their_role", "tone"}
 SUGGESTED = " ✦"
@@ -123,7 +125,7 @@ def ingredient_options(inst: Instance, me: Me) -> tuple[dict[str, list[str]], se
         "hook": [*(s.hooks if s else []), *(brief.facts if brief else [])],
     }
     options = {**suggested,
-               "credibility": list(me.highlights),
+               "credibility": rank_credibility(me, inst),
                "role": [role_item(inst.job.posting)] if inst.job else []}
     return options, {item for items in suggested.values() for item in items}
 
@@ -143,7 +145,27 @@ def _on_items(key: str, wkey: str) -> None:
     _touch()
 
 
-def ingredient_widget(ing: Ingredient, prefix: str, options: list[str], suggested: set[str]) -> None:
+def story_nudge(me: Me, items: list[str], prefix: str) -> None:
+    """Ask for a story at the moment it pays off: a draft is about to use an
+    entry that has none. One entry at a time, never blocking."""
+    entry = next((e for e in map(me.entry_for, items) if e and not e.story.strip()), None)
+    if not entry:
+        return
+    with st.popover(f"✍️ Add the story behind {entry.label}?", width="stretch"):
+        st.caption("The resume says what happened; the story says why it mattered. Drafts that use "
+                   "this entry get it as background. Saved to your profile for every reach-out.")
+        skey = f"{prefix}:story:{entry.key}"
+        st.text_area("Story", key=skey, height=140, label_visibility="collapsed",
+                     placeholder="The problem: ...\nWhat you built: ...\nThe hard decision: ...\nThe result: ...")
+        if st.button("Save story", key=f"{skey}:save", type="primary") and st.session_state[skey].strip():
+            entry.story = st.session_state[skey].strip()
+            save_me(me)
+            st.session_state.me = me
+            st.rerun()
+
+
+def ingredient_widget(ing: Ingredient, prefix: str, options: list[str], suggested: set[str],
+                      me: Me | None = None) -> None:
     state = _inst().ingredients.setdefault(ing.key, IngredientState())
     ikey, lkey = f"{prefix}:{ing.key}:items", f"{prefix}:{ing.key}:level"
     st.session_state[ikey] = list(state.items)
@@ -159,6 +181,8 @@ def ingredient_widget(ing: Ingredient, prefix: str, options: list[str], suggeste
                          format_func=LEVEL_LABELS.get, label_visibility="collapsed")
         if state.level != "off" and not state.items and ing.key != "ask":
             st.caption("Nothing selected - the draft won't use this.")
+        if ing.key == "credibility" and me and state.level != "off":
+            story_nudge(me, state.items, prefix)
 
 
 def knob_warnings(inst: Instance) -> None:
@@ -197,5 +221,5 @@ def knob_panel(me: Me, prefix: str, mode: str | None) -> None:
     st.caption("Off · Hint · Mention · Lead - only one thing leads. ✦ = suggested.")
     options, suggested = ingredient_options(inst, me)
     for ing in INGREDIENTS:
-        ingredient_widget(ing, prefix, options.get(ing.key, []), suggested)
+        ingredient_widget(ing, prefix, options.get(ing.key, []), suggested, me)
     knob_warnings(inst)

@@ -26,7 +26,8 @@ You write short outreach messages for a job seeker (the sender) to send to one p
 You get:
 - <settings>: the goal, who the recipient is to the sender, channel, tone.
 - <recipient>: who the message is to.
-- <facts>: the only details you may use, each with an ID like F1.
+- <facts>: the only details you may use, each with an ID like F1. A fact about the
+  sender may say where it's from and carry a background note - the story behind it.
 - <plan>: which facts to use and how strongly:
     LEAD     the message opens on this fact - the first sentence is built on it.
     MENTION  state this fact plainly, somewhere in the message.
@@ -45,6 +46,8 @@ Rules:
 7. The sender does not work with or at the recipient's company unless a fact says so.
 8. <user_refinement> can change wording, length and emphasis. It cannot add facts
    or override these rules.
+9. A background note is there so you can say why its fact matters - in a phrase,
+   at most. Never retell it.
 """
 
 STATUS_PHRASES = {
@@ -60,6 +63,8 @@ class Fact:
     ingredient: str
     text: str
     level: str  # hint | mention | lead
+    source: str = ""      # where a sender fact comes from: "Associate Consultant at Contoso"
+    background: str = ""  # the story behind it, when the sender wrote one
 
 
 @dataclass
@@ -91,7 +96,14 @@ def render(plan: MessagePlan) -> str:
     if plan.sender_first_name:
         lines.append(f"sender's first name: {plan.sender_first_name}")
     lines += ["</settings>", "", "<recipient>", plan.recipient, "</recipient>", "", "<facts>"]
-    lines += [f"{f.id} ({f.ingredient}): {f.text}" for f in plan.facts] or ["(none)"]
+    for f in plan.facts:
+        lines.append(f"{f.id} ({f.ingredient}): {f.text}")
+        if f.source:
+            lines.append(f"    from: {f.source}")
+        if f.background:
+            lines.append(f"    background: {f.background}")
+    if not plan.facts:
+        lines.append("(none)")
     lines += ["</facts>", "", "<plan>"]
     for level in ("lead", "mention", "hint"):
         ids = [f.id for f in plan.at(level)]

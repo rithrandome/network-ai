@@ -22,11 +22,12 @@ from pydantic import create_model
 from knobs import CHANNELS, INGREDIENT_KEYS, ROLE_STATUSES
 from llm import describe, structured
 from prompts import STATUS_PHRASES, SYSTEM_PROMPT, Fact, MessagePlan, render
-from schemas import DraftOutput, DraftVersion, FactUse, Instance, Me
+from schemas import DraftOutput, DraftVersion, Entry, FactUse, Instance, Me
 from store import now
 from validators import validate
 
 MAX_RETRIES = 2
+MAX_BACKGROUND_CHARS = 600  # enough for the gist; a small model copies long text
 
 SUBJECT_LINE = re.compile(r"^\s*subject:\s*(.+?)\s*\n+", re.IGNORECASE)
 
@@ -52,12 +53,12 @@ def plan(instance: Instance, me: Me, refine: str = "", previous_draft: str = "")
     levels = _single_lead({key: state.level for key, state in instance.ingredients.items()})
     status = settings.get("status", "")
 
-    facts, off_items = [], []
+    facts, off_items, storied = [], [], set()
     for key in INGREDIENT_KEYS:
         state = instance.ingredients.get(key)
         if not state:
             continue
-        items = [i.strip() for i in state.items if i.strip()]
+        items = list(dict.fromkeys(i.strip() for i in state.items if i.strip()))
         if levels[key] == "off":
             off_items += items
             continue
@@ -66,7 +67,14 @@ def plan(instance: Instance, me: Me, refine: str = "", previous_draft: str = "")
                 text = f"{text} - {STATUS_PHRASES[status]}"
             # A lead ingredient with several items leads on the first; the rest are mentioned.
             level = "mention" if levels[key] == "lead" and n > 0 else levels[key]
-            facts.append(Fact(f"F{len(facts) + 1}", key, text, level))
+            fact = Fact(f"F{len(facts) + 1}", key, text, level)
+            entry = me.entry_for(text) if key == "credibility" else None
+            if entry:
+                fact.source = entry.label
+                if entry.key not in storied:  # two bullets from one job share one story
+                    storied.add(entry.key)
+                    fact.background = " ".join(entry.story.split())[:MAX_BACKGROUND_CHARS]
+            facts.append(fact)
 
     # A role at Mention with nothing in it is as good as off.
     role_on = any(f.ingredient == "role" for f in facts)
@@ -149,8 +157,11 @@ if __name__ == "__main__":
     from sources.job_posting import read_job
     from store import new_instance
 
-    me = Me(name="Alex Tester", headline="ML engineer, ex-AWS",
-            highlights=["Built an AWS Bedrock text-to-SQL agent at ~90% accuracy"])
+    me = Me(name="Alex Tester", headline="ML engineer, ex-AWS", entries=[Entry(
+        title="Associate Consultant", org="Contoso Cloud Services",
+        bullets=["Built an AWS Bedrock text-to-SQL agent at ~90% accuracy"],
+        story="Ops teams couldn't query AWS Config without learning its SQL dialect. I added a "
+              "validator agent and a retry loop on execution errors, which got accuracy to ~90%.")])
     instance = new_instance(find_candidates("Jane Doe, Northwind Analytics")[0])
     instance.settings = {"goal": "Referral", "status": "Applied", "their_role": "Potential teammate"}
     instance.job = read_job("https://careers.northwind.example/jobs/NW-2207")
