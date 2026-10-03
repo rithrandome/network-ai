@@ -6,7 +6,8 @@ Each person you reach out to is an instance - saved until you delete it.
   + New       search -> pick the person -> goal (-> status -> the role) ->
               suggestions -> knobs -> first draft
   Playground  the brief, draft versions, regenerate, refine, copy, delete
-  Me          your name, highlights and resume - shared by every instance
+  Me          upload a resume or LinkedIn PDF -> review -> add stories over
+              time (me_page.py); shared by every instance
 
 Run:  uv run streamlit run app.py
 """
@@ -19,6 +20,7 @@ from compose import compose
 from knob_ui import goal_and_status, knob_panel, read_role
 from knobs import CHANNELS, ROLE_STATUSES
 from llm import describe
+from me_page import me_page
 from pipeline import find_candidates, seed_knobs, write_brief
 from schemas import Me
 from store import delete_instance, list_instances, load_instance, load_me, new_instance, save_instance, save_me
@@ -43,10 +45,13 @@ def exa_mode() -> str | None:
     return "mock" if state.get("use_mock") else None
 
 
-# Knob callbacks run before the script - save their edits before anything renders.
+# Widget callbacks run before the script - save their edits before anything renders.
 if state.dirty and state.view not in ("new", "me") and state.get("inst"):
     save_instance(state.inst)
 state.dirty = False
+if state.get("me_dirty"):
+    save_me(state.me)
+    state.me_dirty = False
 
 
 # --- Sidebar -----------------------------------------------------------------------
@@ -62,26 +67,6 @@ with st.sidebar:
         st.button(saved.title, key=f"open:{saved.id}", on_click=go, args=(saved.id,), width="stretch",
                   type="primary" if state.view == saved.id else "tertiary")
     st.caption(f"Model: {describe()}")
-
-
-# --- Me ------------------------------------------------------------------------------
-
-def me_page() -> None:
-    st.header("Me")
-    st.caption("Shared by every instance. Highlights become pickable credibility items.")
-    me = load_me()
-    with st.form("me"):
-        name = st.text_input("Name", me.name)
-        headline = st.text_input("Headline", me.headline, placeholder="e.g. ML engineer, ex-AWS")
-        highlights = st.text_area("Highlights - one per line", "\n".join(me.highlights), height=140,
-                                  placeholder="e.g. Built a Bedrock text-to-SQL agent at ~90% accuracy")
-        resume = st.text_area("Resume text", me.resume_text, height=240,
-                              help="Used to find common ground. Never sent to the drafting model - "
-                                   "only the items you pick are.")
-        if st.form_submit_button("Save", type="primary"):
-            save_me(Me(name=name.strip(), headline=headline.strip(), resume_text=resume.strip(),
-                       highlights=[h.strip() for h in highlights.splitlines() if h.strip()]))
-            st.success("Saved.")
 
 
 # --- + New ---------------------------------------------------------------------------
@@ -128,8 +113,8 @@ def goal_stage(me: Me) -> None:
     goal_and_status(prefix, exa_mode(), job_button=False)
     if not inst.settings.get("goal"):
         return
-    if not me.name:
-        st.info("Tip: fill in the Me page first - your highlights become credibility items.")
+    if not me.entries and not me.highlights:
+        st.info("Tip: upload your resume on the Me page first - its bullets become credibility items.")
     if st.button("Next: suggest the rest", type="primary"):
         job_text = state.get(f"{prefix}:job", "").strip()
         wants_job = inst.settings.get("status") in ROLE_STATUSES and job_text
@@ -258,9 +243,9 @@ def playground(me: Me) -> None:
 
 # --- Route ---------------------------------------------------------------------------
 
-me = load_me()
+me = state.me if "me" in state else load_me()
 if state.view == "me":
-    me_page()
+    me_page(bool(state.get("use_mock", not os.environ.get("EXA_API_KEY"))))
 elif state.view == "new":
     new_page(me)
 elif state.get("inst"):
