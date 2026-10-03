@@ -36,5 +36,8 @@ EDUCATION
 Georgia Institute of Technology - MS Computer Science (OMSCS), 2026 - present
 University of Toronto - BSc Computer Science, 2019 - 2023
 
+CERTIFICATIONS
+AWS Certified Machine Learning - Specialty, Amazon Web Services, 2024
+
 SKILLS
 Python, PyTorch, scikit-learn, LangChain, AWS Bedrock, SQL, Streamlit, Docker

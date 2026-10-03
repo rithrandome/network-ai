@@ -88,6 +88,17 @@ class Education(BaseModel):
     end: str = ""
 
 
+class Certification(BaseModel):
+    name: str = Field(default="", description="Certification name, e.g. AWS Certified Machine Learning - Specialty")
+    issuer: str = Field(default="", description="Who issued it, e.g. Amazon Web Services")
+    date: str = Field(default="", description="When it was earned, as written")
+
+    @property
+    def label(self) -> str:
+        return f"{self.name} ({self.issuer})" if self.issuer and self.issuer.lower() not in self.name.lower() \
+            else self.name
+
+
 class Me(BaseModel):
     """The sender, built from an uploaded resume or LinkedIn PDF and deepened
     over time. Shared by every instance."""
@@ -99,6 +110,8 @@ class Me(BaseModel):
     entries: list[Entry] = Field(default_factory=list)
     education: list[Education] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
+    certifications: list[Certification] = Field(default_factory=list,
+                                                description="From the file, plus any added by hand")
     highlights: list[str] = Field(default_factory=list,
                                   description="Extra achievements typed by hand, one per item")
     resume_text: str = Field(default="", description="Text of the last upload - the source bullets are checked against")
@@ -109,8 +122,10 @@ class Me(BaseModel):
         return self.name.split()[0] if self.name.strip() else ""
 
     def credibility_items(self) -> list[str]:
-        """Everything that can be picked as credibility: checked bullets, then hand-typed highlights."""
-        items = [b for entry in self.entries for b in entry.offered] + self.highlights
+        """Everything that can be picked as credibility: checked bullets, certifications,
+        then hand-typed highlights."""
+        items = ([b for entry in self.entries for b in entry.offered]
+                 + [f"Certified: {c.label}" for c in self.certifications if c.name] + self.highlights)
         return list(dict.fromkeys(i for i in items if i.strip()))
 
     def entry_for(self, item: str) -> Entry | None:

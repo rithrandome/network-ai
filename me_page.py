@@ -22,7 +22,7 @@ from pathlib import Path
 import streamlit as st
 
 from llm import describe, provider
-from schemas import Education, Entry, Me
+from schemas import Certification, Education, Entry, Me
 from sources.resume import ResumeUnreadable, build_profile, read_text
 from store import load_me
 
@@ -184,17 +184,17 @@ def _entry_editor(entry: Entry, me: Me, k: str) -> None:
         st.button("Remove", key=f"{k}:remove", on_click=remove, type="tertiary")
 
 
-def _education_editor(me: Me, k: str) -> None:
-    rows = [s.model_dump() for s in me.education] or [Education().model_dump()]
-
+def _table_editor(me: Me, attr: str, model: type, columns: dict[str, str], key: str) -> None:
+    """An editable table over a list of models; rows without the first column are dropped."""
+    current = getattr(me, attr)
+    rows = [r.model_dump() for r in current] or [model().model_dump()]
     # data_editor keeps a diff in its state; the return value is the edited table.
-    edited = st.data_editor(rows, key=f"{k}:edu", num_rows="dynamic", width="stretch",
-                            column_config={"school": "School", "degree": "Degree", "field": "Field",
-                                           "start": "Start", "end": "End"})
-    schools = [Education(**{c: (r.get(c) or "").strip() for c in Education.model_fields}) for r in edited]
-    schools = [s for s in schools if s.school]
-    if schools != me.education:
-        me.education = schools
+    edited = st.data_editor(rows, key=key, num_rows="dynamic", width="stretch", column_config=columns)
+    first = next(iter(columns))
+    items = [model(**{c: (r.get(c) or "").strip() for c in model.model_fields}) for r in edited]
+    items = [i for i in items if getattr(i, first)]
+    if items != current:
+        setattr(me, attr, items)
         _touch()
 
 
@@ -228,7 +228,13 @@ def review_screen(me: Me, mock: bool) -> None:
     b.button("+ Project", on_click=add, args=("project",), width="stretch")
 
     st.markdown("**Education**")
-    _education_editor(me, k)
+    _table_editor(me, "education", Education, {"school": "School", "degree": "Degree", "field": "Field",
+                                                "start": "Start", "end": "End"}, f"{k}:edu")
+
+    st.markdown("**Certifications**")
+    st.caption("Add any that aren't on your resume. Each one can be picked as credibility in a draft.")
+    _table_editor(me, "certifications", Certification, {"name": "Certification", "issuer": "Issued by",
+                                                        "date": "Date"}, f"{k}:certs")
 
     st.markdown("**Skills**")
     st.multiselect("Skills", me.skills, key=_bind(f"{k}:skills", list(me.skills),

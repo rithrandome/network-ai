@@ -107,7 +107,9 @@ worked example, and code checks the result: every bullet must be found in the
 file (fuzzy match), or it's flagged for you to keep or drop. If some source
 lines aren't covered by anything extracted, that region is read again starting
 at the missed item (at most twice). A title that isn't in the file (a bullet
-put in the title slot) is repaired from its company's line. A re-upload
+put in the title slot) is repaired from its company's line. A certification
+name that isn't in the file is dropped, not flagged - a made-up certification
+is worse than a missing one, and the Me page has a table for adding any. A re-upload
 replaces what came from the file and keeps your stories and edits.
 
 **The profile reaches drafts as facts, not as a resume.** Your bullets are

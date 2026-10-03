@@ -63,6 +63,7 @@ def _sender_block(me: Me) -> str:
              (("name", me.name), ("headline", me.headline), ("location", me.location)) if value]
     lines += [f"worked at: {e.org} ({e.title})" for e in me.entries if e.kind == "job" and e.org]
     lines += [f"studied at: {s.school}" for s in me.education if s.school]
+    lines += [f"certified: {c.label}" for c in me.certifications if c.name]
     lines += [f"did: {item}" for item in me.credibility_items()[:MAX_SENDER_BULLETS]]
     if me.skills:
         lines.append("skills: " + ", ".join(me.skills))

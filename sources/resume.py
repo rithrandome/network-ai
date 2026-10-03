@@ -33,7 +33,7 @@ from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 
 from llm import structured
-from schemas import Education, Entry, Me
+from schemas import Certification, Education, Entry, Me
 from validators import content_words
 
 MAX_SECTION_CHARS = 6_000
@@ -49,7 +49,9 @@ HEADINGS = {
     "education": ["education", "academic background"],
     "skills": ["skills", "technical skills", "top skills", "core skills", "skills & tools", "technologies"],
     "summary": ["summary", "about", "profile", "professional summary", "objective"],
-    "other": ["certifications", "licenses & certifications", "languages", "awards", "honors", "honors-awards",
+    "certifications": ["certifications", "certificates", "licenses & certifications", "licenses and certifications",
+                       "certifications & licenses", "licenses", "professional certifications"],
+    "other": ["languages", "awards", "honors", "honors-awards",
               "publications", "volunteer", "volunteering", "interests", "contact", "leadership", "activities"],
 }
 HEADING_LOOKUP = {name: section for section, names in HEADINGS.items() for name in names}
@@ -163,6 +165,10 @@ class _Schools(BaseModel):
     education: list[Education]
 
 
+class _Certs(BaseModel):
+    certifications: list[Certification]
+
+
 RULES = """Rules:
 - Copy text exactly as written. Do not reword, shorten, summarize or add anything.
 - Leave a field empty if the text doesn't show it.
@@ -237,6 +243,23 @@ Example output:
 <education>
 {text}
 </education>
+"""
+
+
+CERTIFICATIONS_TEMPLATE = """List every certification or license in this section.
+
+Example input:
+Google Professional Data Engineer - Google Cloud, 2023
+Certified Kubernetes Administrator (CKA)
+
+Example output:
+{{"certifications": [{{"name": "Google Professional Data Engineer", "issuer": "Google Cloud", "date": "2023"}}, {{"name": "Certified Kubernetes Administrator (CKA)", "issuer": "", "date": ""}}]}}
+
+""" + RULES + """
+
+<certifications>
+{text}
+</certifications>
 """
 
 
@@ -382,17 +405,28 @@ def build_profile(text: str, existing: Me | None = None, source: str = "",
         on_step("Reading your education")
         education = _extract(EDUCATION_TEMPLATE, _Schools, sections["education"]).education
 
+    certifications: list[Certification] = []
+    if sections.get("certifications"):
+        on_step("Reading your certifications")
+        found = _extract(CERTIFICATIONS_TEMPLATE, _Certs, sections["certifications"]).certifications
+        # A certification that isn't in the file is worse than a missing one - drop it.
+        certifications = [c for c in found if c.name.strip() and found_in(c.name, text)]
+        for c in certifications:  # a guessed issuer is blanked, not kept
+            c.issuer = c.issuer if c.issuer and found_in(c.issuer, text) else ""
+
     me = Me(name=basics.name.strip(), headline=basics.headline.strip(), location=basics.location.strip(),
             summary=re.sub(r"\s+", " ", sections.get("summary") or basics.summary).strip(),
             entries=[e for e in entries if e.title or e.org], education=[s for s in education if s.school],
-            skills=parse_skills(sections.get("skills", "")), resume_text=text, source=source)
+            skills=parse_skills(sections.get("skills", "")), certifications=certifications,
+            resume_text=text, source=source)
     return merge(existing, me) if existing else me
 
 
 def merge(old: Me, new: Me) -> Me:
     """A re-upload replaces what came from the document and keeps what the user
     added: stories, kept bullets, hand-typed highlights, and entries they wrote
-    stories for even if the new document dropped them."""
+    stories for even if the new document dropped them, and certifications
+    the new file doesn't list (added by hand, or still valid)."""
     old_by_key = {e.key: e for e in old.entries}
     for entry in new.entries:
         previous = old_by_key.pop(entry.key, None)
@@ -403,6 +437,8 @@ def merge(old: Me, new: Me) -> Me:
     return new.model_copy(update={
         "entries": new.entries + kept,
         "highlights": old.highlights,
+        "certifications": new.certifications + [c for c in old.certifications
+                                                if _norm(c.name) not in {_norm(n.name) for n in new.certifications}],
         "name": new.name or old.name,
         "headline": new.headline or old.headline,
         "location": new.location or old.location,
