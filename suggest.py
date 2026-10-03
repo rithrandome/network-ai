@@ -13,18 +13,15 @@ common ground must be found in both the sender's and the person's text, hooks
 in the person's profile, and asks must be short phrases, not whole messages.
 """
 
-import re
-
 from langchain_core.prompts import PromptTemplate
 
 from llm import structured
 from schemas import Instance, Me, Suggestions
+from validators import grounded
 
 MAX_PROFILE_CHARS = 8_000
 MAX_ASK_WORDS = 15
 
-STOPWORDS = {"the", "and", "for", "with", "from", "that", "this", "their", "your", "both",
-             "about", "into", "have", "work", "working", "experience", "team"}
 
 SUGGEST_TEMPLATE = """
 A job seeker (the sender) wants to reach out to someone. Suggest how.
@@ -68,16 +65,6 @@ def _job_block(instance: Instance) -> str:
              (("title", p.title), ("company", p.company), ("job ID", p.job_id), ("location", p.location)) if value]
     lines += [f"requirement: {r}" for r in p.requirements]
     return "<job>\n" + "\n".join(lines) + "\n</job>\n"
-
-
-def _words(text: str) -> set[str]:
-    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= 3 and w not in STOPWORDS}
-
-
-def grounded(item: str, text: str) -> bool:
-    """Most of the item's content words (all of a two-word item) appear in text."""
-    words = _words(item)
-    return bool(words) and len(words & _words(text)) * 2 > len(words)
 
 
 def _dedupe(items: list[str]) -> list[str]:
