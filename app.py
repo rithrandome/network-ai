@@ -1,67 +1,270 @@
-"""Streamlit front end for network-ai."""
+"""Streamlit front end for network-ai.
+
+Each person you reach out to is an instance - saved until you delete it.
+  Sidebar     your instances (newest first), + New, Me; under them, the open
+              instance's knobs
+  + New       search -> pick the person -> goal (-> status -> the role) ->
+              suggestions -> knobs -> first draft
+  Playground  the brief, draft versions, regenerate, refine, copy, delete
+  Me          your name, highlights and resume - shared by every instance
+
+Run:  uv run streamlit run app.py
+"""
 
 import os
 
 import streamlit as st
 
+from compose import compose
+from knob_ui import goal_and_status, knob_panel, read_role
+from knobs import CHANNELS, ROLE_STATUSES
 from llm import describe
-from pipeline import find_candidates, write_brief
+from pipeline import find_candidates, seed_knobs, write_brief
+from schemas import Me
+from store import delete_instance, list_instances, load_instance, load_me, new_instance, save_instance, save_me
+from suggest import suggest
 
 st.set_page_config(page_title="network-ai", page_icon="🤝")
-st.title("network-ai 🤝")
-st.caption("Describe someone you want to reach out to, pick the right profile, get a brief.")
-st.caption(f"Model: {describe()}")
 
-has_exa_key = bool(os.environ.get("EXA_API_KEY"))
-use_mock = st.toggle("Use mock data (fictional profiles, no search credit)", value=not has_exa_key,
-                     disabled=not has_exa_key)
-if use_mock:
-    st.caption("Searching the mock fixture." + ("" if has_exa_key else " Add EXA_API_KEY to .env for real search."))
-else:
-    st.caption("Live Exa people search - about $0.007 per new lookup; repeated lookups come from the local cache for free.")
+state = st.session_state
+state.setdefault("view", "new")
+state.setdefault("stage", "search")
+state.setdefault("dirty", False)
 
-with st.form("lookup"):
-    query = st.text_input("Who are you looking for?", label_visibility="collapsed",
-                          placeholder="Name plus anything you know - e.g. Ashutosh Mishra, Tampa, Capgemini, Citi")
-    submitted = st.form_submit_button("Find", type="primary")
 
-if submitted and query.strip():
-    with st.spinner("Searching..."):
-        try:
-            st.session_state.candidates = find_candidates(query, mode="mock" if use_mock else None)
-            st.session_state.pop("brief", None)
-        except Exception as exc:
-            st.error(f"Lookup failed: {exc}")
+def go(view: str) -> None:
+    state.view = view
+    state.inst = load_instance(view) if view not in ("new", "me") else None
+    if view == "new":
+        state.stage = "search"
 
-candidates = st.session_state.get("candidates")
-if candidates == []:
-    st.warning("No profiles found - try adding where they work or live.")
-elif candidates:
-    st.subheader("Which one?")
+
+def exa_mode() -> str | None:
+    return "mock" if state.get("use_mock") else None
+
+
+# Knob callbacks run before the script - save their edits before anything renders.
+if state.dirty and state.view not in ("new", "me") and state.get("inst"):
+    save_instance(state.inst)
+state.dirty = False
+
+
+# --- Sidebar -----------------------------------------------------------------------
+
+with st.sidebar:
+    st.title("network-ai 🤝")
+    new_col, me_col = st.columns(2)
+    new_col.button("+ New", on_click=go, args=("new",), width="stretch",
+                   type="primary" if state.view == "new" else "secondary")
+    me_col.button("Me", on_click=go, args=("me",), width="stretch",
+                  type="primary" if state.view == "me" else "secondary")
+    for saved in list_instances():
+        st.button(saved.title, key=f"open:{saved.id}", on_click=go, args=(saved.id,), width="stretch",
+                  type="primary" if state.view == saved.id else "tertiary")
+    st.caption(f"Model: {describe()}")
+
+
+# --- Me ------------------------------------------------------------------------------
+
+def me_page() -> None:
+    st.header("Me")
+    st.caption("Shared by every instance. Highlights become pickable credibility items.")
+    me = load_me()
+    with st.form("me"):
+        name = st.text_input("Name", me.name)
+        headline = st.text_input("Headline", me.headline, placeholder="e.g. ML engineer, ex-AWS")
+        highlights = st.text_area("Highlights - one per line", "\n".join(me.highlights), height=140,
+                                  placeholder="e.g. Built a Bedrock text-to-SQL agent at ~90% accuracy")
+        resume = st.text_area("Resume text", me.resume_text, height=240,
+                              help="Used to find common ground. Never sent to the drafting model - "
+                                   "only the items you pick are.")
+        if st.form_submit_button("Save", type="primary"):
+            save_me(Me(name=name.strip(), headline=headline.strip(), resume_text=resume.strip(),
+                       highlights=[h.strip() for h in highlights.splitlines() if h.strip()]))
+            st.success("Saved.")
+
+
+# --- + New ---------------------------------------------------------------------------
+
+def search_stage() -> None:
+    has_key = bool(os.environ.get("EXA_API_KEY"))
+    state.setdefault("use_mock", not has_key)
+    # Kept outside the widget's own key: Streamlit drops a widget's state once
+    # it stops rendering, and the playground still needs the mode.
+    st.toggle("Use mock data (fictional profiles, no search credit)", key="mock_toggle",
+              value=state.use_mock, disabled=not has_key,
+              on_change=lambda: state.update(use_mock=state.mock_toggle))
+    with st.form("lookup"):
+        query = st.text_input("Who are you reaching out to?", label_visibility="collapsed",
+                              placeholder="Name plus anything you know - e.g. Ashutosh Mishra, Tampa, Capgemini, Citi")
+        if st.form_submit_button("Find", type="primary") and query.strip():
+            with st.spinner("Searching..."):
+                try:
+                    state.candidates = find_candidates(query, mode=exa_mode())
+                except Exception as exc:
+                    st.error(f"Lookup failed: {exc}")
+
+    candidates = state.get("candidates")
+    if candidates == []:
+        st.warning("No profiles found - try adding where they work or live.")
+    if not candidates:
+        return
     labels = []
     for c in candidates:
         role = c.current_role
-        now = f"{role.title} @ {role.company}" if role and role.company else (c.headline or "")
-        labels.append(f"**{c.name}** - {now} · {c.location or 'location unknown'}")
-    choice = st.radio("Candidates", range(len(candidates)), format_func=lambda i: labels[i], label_visibility="collapsed")
-    chosen = candidates[choice]
-    st.caption(chosen.url)
+        current = f"{role.title} @ {role.company}" if role and role.company else (c.headline or "")
+        labels.append(f"**{c.name}** - {current} · {c.location or 'location unknown'}")
+    choice = st.radio("Which one?", range(len(candidates)), format_func=lambda i: labels[i])
+    st.caption(candidates[choice].url)
+    if st.button("Reach out to this person", type="primary"):
+        state.inst = new_instance(candidates[choice])
+        state.stage = "goal"
+        st.rerun()
 
-    if st.button("Write brief"):
-        with st.spinner("Reading their profile..."):
-            try:
-                st.session_state.brief = (chosen.url, write_brief(chosen))
-            except Exception as exc:
-                st.error(f"Couldn't write a brief: {exc}")
 
-    brief_for = st.session_state.get("brief")
-    if brief_for and brief_for[0] == chosen.url:
-        brief = brief_for[1]
-        st.subheader("Summary")
-        st.write(brief.summary)
-        st.subheader("Interesting facts")
-        for fact in brief.facts:
-            st.write(f"- {fact}")
-        st.subheader("Icebreakers")
-        for opener in brief.icebreakers:
-            st.write(f"- {opener}")
+def goal_stage(me: Me) -> None:
+    inst = state.inst
+    prefix = f"new:{inst.id}"
+    goal_and_status(prefix, exa_mode(), job_button=False)
+    if not inst.settings.get("goal"):
+        return
+    if not me.name:
+        st.info("Tip: fill in the Me page first - your highlights become credibility items.")
+    if st.button("Next: suggest the rest", type="primary"):
+        job_text = state.get(f"{prefix}:job", "").strip()
+        wants_job = inst.settings.get("status") in ROLE_STATUSES and job_text
+        if wants_job and (not inst.job or inst.job.input != job_text) and not read_role(job_text, exa_mode()):
+            return
+        try:
+            with st.spinner("Reading their profile and suggesting knobs..."):
+                inst.suggestions = suggest(inst, me)
+                inst.brief = write_brief(inst.person)
+        except Exception as exc:
+            st.error(f"The model call failed: {exc}")
+            return
+        seed_knobs(inst, me)
+        state.stage = "knobs"
+        st.rerun()
+
+
+def knobs_stage(me: Me) -> None:
+    inst = state.inst
+    knob_panel(me, f"new:{inst.id}", exa_mode())
+    if st.button("Create and write the first draft", type="primary"):
+        try:
+            with st.spinner("Writing the first draft..."):
+                inst.drafts.append(compose(inst, me))
+        except Exception as exc:
+            st.error(f"The model call failed: {exc}")
+            return
+        save_instance(inst)
+        state.view = inst.id
+        st.rerun()
+
+
+def new_page(me: Me) -> None:
+    st.header("New reach-out")
+    inst = state.get("inst")
+    if state.stage != "search" and inst:
+        person = inst.person
+        st.markdown(f"**{person.name}** - {person.headline or ''}")
+        if st.button("← Pick someone else", type="tertiary"):
+            state.stage, state.inst = "search", None
+            st.rerun()
+    if state.stage == "search" or not inst:
+        search_stage()
+    elif state.stage == "goal":
+        goal_stage(me)
+    else:
+        knobs_stage(me)
+
+
+# --- Playground --------------------------------------------------------------------
+
+def generate(me: Me, refine: str = "", base=None) -> None:
+    inst = state.inst
+    try:
+        with st.spinner("Writing..."):
+            inst.drafts.append(compose(inst, me, refine=refine, base=base))
+    except Exception as exc:
+        st.error(f"The model call failed: {exc}")
+        return
+    save_instance(inst)
+    state[f"{inst.id}:ver"] = len(inst.drafts) - 1
+    st.rerun()
+
+
+def playground(me: Me) -> None:
+    inst = state.inst
+    with st.sidebar:
+        st.divider()
+        knob_panel(me, inst.id, exa_mode())
+
+    person = inst.person
+    st.header(person.name)
+    st.caption(" · ".join(p for p in (person.headline, person.url) if p))
+    if inst.brief:
+        with st.expander("Brief"):
+            st.write(inst.brief.summary)
+            for fact in inst.brief.facts:
+                st.write(f"- {fact}")
+
+    drafts = inst.drafts
+    if drafts:
+        vkey = f"{inst.id}:ver"
+        index = min(state.get(vkey, len(drafts) - 1), len(drafts) - 1)
+        prev_col, label_col, next_col = st.columns([1, 4, 1])
+        if prev_col.button("◀", disabled=index == 0, width="stretch"):
+            state[vkey] = index - 1
+            st.rerun()
+        label_col.markdown(f"<div style='text-align:center'>Version {index + 1} of {len(drafts)}</div>",
+                           unsafe_allow_html=True)
+        if next_col.button("▶", disabled=index == len(drafts) - 1, width="stretch"):
+            state[vkey] = index + 1
+            st.rerun()
+
+        draft = drafts[index]
+        channel = CHANNELS.get(draft.settings.get("channel", ""), CHANNELS["LinkedIn note"])
+        if draft.subject:
+            st.code(draft.subject, language=None, wrap_lines=True)
+        st.code(draft.body, language=None, wrap_lines=True)
+        st.caption(f"{len(draft.body)}/{channel.max_chars} characters · {draft.settings.get('goal', '')} · "
+                   f"{channel.name} · {draft.model} · {draft.attempts} attempt(s)")
+        if draft.refine:
+            st.caption(f"Refined with: {draft.refine}")
+        if draft.problems:
+            st.warning("Checks still failing after retries - edit before sending:\n\n"
+                       + "\n".join(f"- {p}" for p in draft.problems))
+    else:
+        draft = None
+        st.info("No drafts yet.")
+
+    regen_col, del_col = st.columns([3, 1])
+    if regen_col.button("Regenerate with current knobs", type="primary"):
+        generate(me)
+    with del_col.popover("Delete"):
+        st.write(f"Delete {person.name} and every draft?")
+        if st.button("Delete for good", type="primary"):
+            delete_instance(inst.id)
+            go("new")
+            st.rerun()
+
+    if draft:
+        with st.form("refine", clear_on_submit=True):
+            refine = st.text_input("Refine this version", placeholder="e.g. shorter, and less formal")
+            if st.form_submit_button("Refine") and refine.strip():
+                generate(me, refine=refine, base=draft)
+
+
+# --- Route ---------------------------------------------------------------------------
+
+me = load_me()
+if state.view == "me":
+    me_page()
+elif state.view == "new":
+    new_page(me)
+elif state.get("inst"):
+    playground(me)
+else:
+    go("new")
+    st.rerun()

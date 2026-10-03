@@ -88,13 +88,23 @@ def seed_knobs(instance: Instance, me: Me) -> Instance:
 
 
 def change_goal(instance: Instance, goal: str) -> Instance:
-    """Switch goals. A level the user moved stays put; a level still at the old
-    goal's default moves to the new goal's default."""
-    old = default_levels(instance.settings.get("goal", ""))
-    new = default_levels(goal)
+    """Switch goals. A level or channel the user changed stays put; one still at
+    the old goal's default moves to the new goal's default."""
+    old_goal = instance.settings.get("goal", "")
+    old, new = default_levels(old_goal), default_levels(goal)
+    if instance.settings.get("channel") == rule_for(old_goal).channel:
+        instance.settings["channel"] = rule_for(goal).channel
+    moved = []
     for key, state in instance.ingredients.items():
         if state.level == old.get(key):
             state.level = new[key]
+            moved.append(key)
+    # One lead only: a lead the user chose beats one the new defaults brought in.
+    leads = [k for k, s in instance.ingredients.items() if s.level == "lead"]
+    if len(leads) > 1:
+        for key in leads:
+            if key in moved:
+                instance.ingredients[key].level = "mention"
     instance.settings["goal"] = goal
     return instance
 

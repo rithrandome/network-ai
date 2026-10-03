@@ -2,13 +2,13 @@
 
 A networking assistant for job seekers. Describe someone you want to reach out
 to in one line - a name plus whatever you know ("Ashutosh Mishra, Tampa,
-Capgemini, Citi") - pick the right profile from the candidates, and get a
-brief: who they are, what's interesting about them, and how to open the
-conversation.
+Capgemini, Citi") - pick the right profile from the candidates, say what the reach-out is for,
+and get a draft message built from the context you chose - then keep tweaking
+it in a playground that's saved until you delete it.
 
-Early stage: resolution and the brief work end to end. Context capture (who
-this person is to you, what this reach-out is for), per-channel outreach drafts
-and a tracker come next.
+Each person is an **instance**, like a chat session: the person, a brief, the
+knobs (goal, who they are to you, channel, tone, what goes in), and every draft
+version. A tracker comes next.
 
 ## Pipeline
 
@@ -17,9 +17,15 @@ one free-text description
   --> Exa people search        -> up to 10 candidate profiles (full profile markdown
                                   + structured work history), via exa-py
   --> you pick the right one    (same-name matches are normal)
-  --> chat model (llm.py)       -> Brief {summary, facts, icebreakers},
-                                  Pydantic-constrained
-  --> Streamlit UI
+  --> goal first                 (decides whether status and the job apply)
+  --> job link or pasted JD     -> Exa contents fetch -> JobPosting (extract model)
+  --> suggest (one model call)  -> role guess, common ground, hooks, asks;
+                                   filtered by code, then knobs seeded from the goal
+  --> you adjust the knobs      settings + ingredients at Off/Hint/Mention/Lead
+  --> plan -> compose -> check  numbered facts + a LEAD/MENTION/HINT plan ->
+                                   DraftOutput{subject, body, used} -> validators ->
+                                   retry with the problems (at most 2)
+  --> playground                versions, regenerate, refine, copy - saved in SQLite
 ```
 
 ## Why this, not that
@@ -65,6 +71,52 @@ schema instead of filling it in. No temperature is passed to Claude: Sonnet 5
 rejects sampling parameters. Ollama's `num_ctx` is raised to 8192 because its
 default 2048-token window silently truncates a full profile.
 
+**Knobs as structured choices, not an "add context" box.** Context boxes go
+unused, and output quality depends on context. So every knob is a pick from a
+short list with custom input always available. The goal comes first and
+narrows the rest (`knobs.GOAL_RULES`): it decides whether your application
+status matters, the default channel, and the starting level of each ingredient.
+
+**Ingredients with a level, not on/off.** Each piece of content - your
+credibility, the role, the ask, common ground, a hook, how you found them,
+something only you know - is Off, Hint (alluded to), Mention (stated) or Lead
+(the opening is built on it; only one leads). Implicit vs explicit is a real
+choice in outreach: common ground often works better hinted at than announced.
+
+**Suggestions that don't push.** One model call after the goal guesses who the
+person is to you and offers common ground, hooks and ask wordings, all marked
+✦. Open suggestions start unselected. The raw output isn't trusted: on a 1B
+model, "common ground" came back as the JD's requirements, so code keeps only
+common ground found in both people's text and hooks found in their profile.
+
+**A rendered plan, not a template with blanks.** The system prompt is fixed:
+what the levels mean and the rules. The knobs become the user message, built
+in code: settings, the selected items as numbered facts (F1..Fn), and a plan
+saying which facts lead, get mentioned or get hinted. Off items are never sent,
+so they can't leak. The compose model never sees the raw profile, resume or JD
+requirements - given requirements, a small model wrote them up as the sender's
+own experience, and no check could catch it because the words were in the
+prompt.
+
+**Code checks, then retry - never truncate.** The output schema is narrowed
+per message (fact IDs limited to the plan's, subject required on email), so
+constrained decoding enforces what it can. Code checks the rest: length per
+channel, the lead fact in the opening, mentions actually stated, off items not
+leaking, and no numbers or names that weren't in the prompt. Problems go back
+to the model as a retry turn. A draft still failing after two retries is kept
+with its problems shown - a truncated message reads worse than a long one.
+Whether a hint was subtle or the tone landed is a judgment call, left to an
+LLM judge in evaluation rather than the live loop.
+
+**SQLite, one JSON row per instance.** Local, single-user, and the models are
+still changing - a new field needs no migration. It holds real people's data,
+so it lives in the gitignored `.data/`.
+
+On gemma3:1b the whole loop runs, but drafts often still fail a check (it
+won't reliably state the role it was told to lead with); the checks report it
+rather than hide it. Drafting is the step a bigger model is for:
+`LLM_PROVIDER=anthropic` or a larger `OLLAMA_MODEL`.
+
 ## Run it
 
 Requires [Ollama](https://ollama.com) running locally:
@@ -74,16 +126,25 @@ ollama pull gemma3:1b
 uv sync
 cp .env.example .env        # add EXA_API_KEY to look up real people
 
-EXA_MODE=mock uv run python pipeline.py      # CLI, fictional data, no keys
+EXA_MODE=mock uv run python pipeline.py      # CLI brief, fictional data, no keys
+EXA_MODE=mock uv run python compose.py       # CLI draft: prints the rendered plan and the checked draft
 uv run streamlit run app.py                  # app; live search if EXA_API_KEY is set, else mock
 uv run python -m sources.exa_client "Name, company, city"   # candidate lookup only
 ```
 
 ## Files
 
-- `pipeline.py` - `find_candidates()` and `write_brief()`
+- `app.py` - Streamlit: instance sidebar, + New flow, playground, Me page
+- `knob_ui.py` - the knob widgets, shared by the New flow and the playground sidebar
+- `knobs.py` - knob registry: settings, ingredients, levels, channels, goal rules
+- `pipeline.py` - `find_candidates()`, `write_brief()`, knob seeding and goal changes
+- `suggest.py` - the suggestions call and the code filter on its output
+- `prompts.py` - fixed system prompt, `MessagePlan`, `render()`
+- `compose.py` - knobs -> plan -> draft, with the validate/retry loop
+- `validators.py` - the deterministic checks
+- `store.py` - SQLite persistence (instances, your profile)
 - `llm.py` - model per role, Ollama or Claude, structured output
-- `sources/exa_client.py` - Exa people search (exa-py), cache/offline/mock modes
-- `schemas.py` - `Candidate`, `Role`, `Brief`
-- `mock_data/exa_people_search.json` - fictional Exa response (two Jane Does)
-- `app.py` - Streamlit front end
+- `sources/exa_client.py` - Exa people search and page fetch (exa-py), cache/offline/mock modes
+- `sources/job_posting.py` - job link or pasted JD -> `JobPosting`
+- `schemas.py` - the data models
+- `mock_data/` - fictional Exa response (two Jane Does) and a fictional job posting

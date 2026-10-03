@@ -112,8 +112,10 @@ def _feedback(problems: list[str]) -> str:
             + "\nReturn the full revised draft, fixing every problem and keeping everything else.")
 
 
-def compose(instance: Instance, me: Me, refine: str = "") -> DraftVersion:
-    previous = instance.drafts[-1].body if (refine and instance.drafts) else ""
+def compose(instance: Instance, me: Me, refine: str = "", base: DraftVersion | None = None) -> DraftVersion:
+    """refine rewrites base (default: the latest draft) with the current knobs."""
+    base = base or (instance.drafts[-1] if instance.drafts else None)
+    previous = base.body if (refine and base) else ""
     message_plan = plan(instance, me, refine, previous)
     user_message = render(message_plan)
     # Invented-detail check: anything in the prompt is fair game, plus the sender's name.
