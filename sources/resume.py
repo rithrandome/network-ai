@@ -71,6 +71,9 @@ def read_text(filename: str, data: bytes) -> str:
         from pypdf import PdfReader
 
         text = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages)
+        # Kerning artifact: "T echnology", "V alidated". A lone capital other
+        # than A or I is never a word on its own.
+        text = re.sub(r"\b([B-HJ-Z]) ([a-z]{2,})", r"\1\2", text)
     elif suffix == ".docx":
         from docx import Document
 
@@ -82,6 +85,8 @@ def read_text(filename: str, data: bytes) -> str:
         text = data.decode("utf-8", errors="replace")
     else:
         raise ResumeUnreadable(f"{suffix or 'That file type'} isn't supported - upload a PDF or DOCX.")
+    # Icon-font names LaTeX templates leak into the text: "/external-link-alt".
+    text = re.sub(r"(?<!\S)/[a-z]+(?:-[a-z]+)+", "", text)
     if len(text.strip()) < MIN_TEXT_CHARS:
         raise ResumeUnreadable("Couldn't find text in that file (a scanned PDF?) - paste the text instead.")
     return text
@@ -161,8 +166,9 @@ class _Projects(BaseModel):
     projects: list[_Project]
 
 
-class _Schools(BaseModel):
-    education: list[Education]
+class _School(BaseModel):
+    school: str = Field(description="School name, copied exactly")
+    degree: str = Field(default="", description="The whole degree text, copied exactly")
 
 
 class _Certs(BaseModel):
@@ -230,13 +236,13 @@ Example output:
 </projects>
 """
 
-EDUCATION_TEMPLATE = """List every school in this education section.
+EDUCATION_TEMPLATE = """This is one degree from a resume. Copy the school name and the whole degree text.
 
 Example input:
-University of Texas - BS Statistics, 2016 - 2020
+University of Texas - BS in Statistics, Minor in Economics
 
 Example output:
-{{"education": [{{"school": "University of Texas", "degree": "BS", "field": "Statistics", "start": "2016", "end": "2020"}}]}}
+{{"school": "University of Texas", "degree": "BS in Statistics, Minor in Economics"}}
 
 """ + RULES + """
 
@@ -249,11 +255,11 @@ Example output:
 CERTIFICATIONS_TEMPLATE = """List every certification or license in this section.
 
 Example input:
-Google Professional Data Engineer - Google Cloud, 2023
+Google Professional Data Engineer - Google Cloud, Issued Mar 2023, Expires Mar 2025
 Certified Kubernetes Administrator (CKA)
 
 Example output:
-{{"certifications": [{{"name": "Google Professional Data Engineer", "issuer": "Google Cloud", "date": "2023"}}, {{"name": "Certified Kubernetes Administrator (CKA)", "issuer": "", "date": ""}}]}}
+{{"certifications": [{{"name": "Google Professional Data Engineer", "issuer": "Google Cloud", "issued": "Mar 2023", "expires": "Mar 2025"}}, {{"name": "Certified Kubernetes Administrator (CKA)", "issuer": "", "issued": "", "expires": ""}}]}}
 
 """ + RULES + """
 
@@ -370,6 +376,65 @@ def _read_entries(section: str, to_entries: Callable[[str], list[Entry]]) -> lis
     return entries
 
 
+# --- Education (code first) ------------------------------------------------------------
+
+MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+DATE = rf"(?:{MONTH}\s+)?(?:19|20)\d{{2}}"
+DATE_RANGE = re.compile(rf"\(?({DATE})(?:\s*(?:-|–|—|to)\s*({DATE}|present|current|now))?\)?", re.IGNORECASE)
+GRADE = re.compile(r"\b(?:c?gpa|grade|percentage|score)\s*[:\-]?\s*[\d.]+(?:\s*/\s*[\d.]+)?\s*%?",
+                   re.IGNORECASE)
+SCHOOL_WORDS = re.compile(r"\b(university|institute|college|school|academy|polytechnic|iit|nit)\b", re.IGNORECASE)
+
+
+def _education_blocks(section: str) -> list[str]:
+    """One block per degree, anchored on its date range - every degree has one,
+    in every format, and a second degree at the same school has its own. If the
+    section's first line carries a date, dates open blocks (school and dates on
+    one line, as in most PDF templates); otherwise they close them (LinkedIn puts
+    the dates under the degree)."""
+    lines = [line.strip() for line in section.splitlines() if line.strip()]
+    dated = [bool(DATE_RANGE.search(line)) for line in lines]
+    if sum(dated) < 2:
+        return ["\n".join(lines)] if lines else []
+    blocks: list[list[str]] = []
+    opens = dated[0]
+    for line, has_date in zip(lines, dated):
+        if not blocks or (opens and has_date):
+            blocks.append([])
+        blocks[-1].append(line)
+        if not opens and has_date and line is not lines[-1]:
+            blocks.append([])
+    return ["\n".join(b) for b in blocks if b]
+
+
+def _school_from(block: str) -> Education:
+    match = DATE_RANGE.search(block)
+    start, end = (match.group(1), match.group(2) or "") if match else ("", "")
+    if not match or match.group(2) is None:  # a lone date is the graduation date
+        start, end = "", start
+    grade = GRADE.search(block)
+    rest = GRADE.sub("", DATE_RANGE.sub("", block, count=1))
+    rest = re.sub(r"\(\s*\)", "", rest)  # what a parenthesized date leaves behind
+    lines = [line.strip(" ,·|-–—\t") for line in rest.splitlines()]
+    lines = [line for line in lines if line]
+    if len(lines) >= 2:
+        # The school is the line that names an institution, else the first line;
+        # every other line is the degree, kept whole.
+        i = next((n for n, line in enumerate(lines) if SCHOOL_WORDS.search(line)), 0)
+        school, degree = lines[i], ", ".join(lines[:i] + lines[i + 1:])
+    else:
+        # One line holds both ("University of Texas - BS Statistics"): the model splits it.
+        found: _School = _extract(EDUCATION_TEMPLATE, _School, lines[0] if lines else block)
+        school = found.school.strip() if found_in(found.school, block) else (lines[0] if lines else "")
+        degree = found.degree.strip() if found.degree and found_in(found.degree, block) else ""
+    return Education(school=school, degree=degree, grade=grade.group().strip() if grade else "",
+                     start=start.strip(), end=end.strip())
+
+
+def read_education(section: str) -> list[Education]:
+    return [s for s in map(_school_from, _education_blocks(section)) if s.school]
+
+
 # --- The whole profile -----------------------------------------------------------------
 
 def build_profile(text: str, existing: Me | None = None, source: str = "",
@@ -403,7 +468,7 @@ def build_profile(text: str, existing: Me | None = None, source: str = "",
     education: list[Education] = []
     if sections.get("education"):
         on_step("Reading your education")
-        education = _extract(EDUCATION_TEMPLATE, _Schools, sections["education"]).education
+        education = read_education(sections["education"])
 
     certifications: list[Certification] = []
     if sections.get("certifications"):
@@ -411,8 +476,11 @@ def build_profile(text: str, existing: Me | None = None, source: str = "",
         found = _extract(CERTIFICATIONS_TEMPLATE, _Certs, sections["certifications"]).certifications
         # A certification that isn't in the file is worse than a missing one - drop it.
         certifications = [c for c in found if c.name.strip() and found_in(c.name, text)]
-        for c in certifications:  # a guessed issuer is blanked, not kept
-            c.issuer = c.issuer if c.issuer and found_in(c.issuer, text) else ""
+        # A guessed issuer or date is blanked. Checked against this section only:
+        # "2023" is somewhere in every resume.
+        for c in certifications:
+            c.issuer, c.issued, c.expires = (v if v and found_in(v, sections["certifications"]) else ""
+                                             for v in (c.issuer, c.issued, c.expires))
 
     me = Me(name=basics.name.strip(), headline=basics.headline.strip(), location=basics.location.strip(),
             summary=re.sub(r"\s+", " ", sections.get("summary") or basics.summary).strip(),

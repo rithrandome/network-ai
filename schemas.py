@@ -1,10 +1,24 @@
 """Data models shared across network-ai's pipeline steps."""
 
+import re
+from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from knobs import THEIR_ROLE
+
+MONTHS = {m: i for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], start=1)}
+
+
+def parse_month_year(text: str) -> tuple[int, int] | None:
+    """"Mar 2027" -> (2027, 3); "2027" -> (2027, 12) (counts the whole year); else None."""
+    year = re.search(r"\b(19|20)\d{2}\b", text)
+    if not year:
+        return None
+    month = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)", text.lower())
+    return int(year.group()), MONTHS[month.group(1)] if month else 12
 
 
 class Role(BaseModel):
@@ -81,17 +95,45 @@ class Entry(BaseModel):
 
 
 class Education(BaseModel):
+    """One degree. `degree` is the line as written - "B.Tech in Instrumentation
+    and Control Engineering, Minor in Computer Applications" - not split into
+    degree/major/minor, which resumes write too many ways to split reliably."""
+
     school: str = ""
-    degree: str = Field(default="", description="e.g. B.Math, MS")
-    field: str = Field(default="", description="e.g. Computer Science")
+    degree: str = Field(default="", description="The degree line as written, majors and minors included")
+    grade: str = Field(default="", description="GPA, CGPA or percentage as written, e.g. GPA: 4.0")
     start: str = ""
     end: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fold_field(cls, data):
+        """Profiles saved before degree took the whole line had a separate field."""
+        if isinstance(data, dict) and data.get("field"):
+            data = dict(data)
+            data["degree"] = ", ".join(p for p in (data.get("degree"), data.pop("field")) if p)
+        return data
 
 
 class Certification(BaseModel):
     name: str = Field(default="", description="Certification name, e.g. AWS Certified Machine Learning - Specialty")
     issuer: str = Field(default="", description="Who issued it, e.g. Amazon Web Services")
-    date: str = Field(default="", description="When it was earned, as written")
+    issued: str = Field(default="", description="When it was earned, as written, e.g. Mar 2024")
+    expires: str = Field(default="", description="When it expires, as written; empty if it doesn't")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _date_to_issued(cls, data):
+        if isinstance(data, dict) and "date" in data:
+            data = dict(data)
+            data.setdefault("issued", data.pop("date"))
+        return data
+
+    @property
+    def expired(self) -> bool:
+        """True only when the expiry date is readable and in the past."""
+        found = parse_month_year(self.expires)
+        return bool(found) and found < (date.today().year, date.today().month)
 
     @property
     def label(self) -> str:
@@ -125,7 +167,8 @@ class Me(BaseModel):
         """Everything that can be picked as credibility: checked bullets, certifications,
         then hand-typed highlights."""
         items = ([b for entry in self.entries for b in entry.offered]
-                 + [f"Certified: {c.label}" for c in self.certifications if c.name] + self.highlights)
+                 + [f"Certified: {c.label}" for c in self.certifications if c.name and not c.expired]
+                 + self.highlights)
         return list(dict.fromkeys(i for i in items if i.strip()))
 
     def entry_for(self, item: str) -> Entry | None:

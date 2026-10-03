@@ -228,13 +228,14 @@ def review_screen(me: Me, mock: bool) -> None:
     b.button("+ Project", on_click=add, args=("project",), width="stretch")
 
     st.markdown("**Education**")
-    _table_editor(me, "education", Education, {"school": "School", "degree": "Degree", "field": "Field",
-                                                "start": "Start", "end": "End"}, f"{k}:edu")
+    _table_editor(me, "education", Education, {"school": "School", "degree": "Degree (as written, minors included)",
+                                                "grade": "GPA / grade", "start": "Start", "end": "End"}, f"{k}:edu")
 
     st.markdown("**Certifications**")
-    st.caption("Add any that aren't on your resume. Each one can be picked as credibility in a draft.")
+    st.caption("Add any that aren't on your resume. Each one can be picked as credibility in a draft; "
+               "expired ones aren't offered.")
     _table_editor(me, "certifications", Certification, {"name": "Certification", "issuer": "Issued by",
-                                                        "date": "Date"}, f"{k}:certs")
+                                                        "issued": "Issued", "expires": "Expires"}, f"{k}:certs")
 
     st.markdown("**Skills**")
     st.multiselect("Skills", me.skills, key=_bind(f"{k}:skills", list(me.skills),

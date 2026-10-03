@@ -37,7 +37,7 @@ Georgia Institute of Technology - MS Computer Science (OMSCS), 2026 - present
 University of Toronto - BSc Computer Science, 2019 - 2023
 
 CERTIFICATIONS
-AWS Certified Machine Learning - Specialty, Amazon Web Services, 2024
+AWS Certified Machine Learning - Specialty, Amazon Web Services, Issued Mar 2024, Expires Mar 2027
 
 SKILLS
 Python, PyTorch, scikit-learn, LangChain, AWS Bedrock, SQL, Streamlit, Docker
