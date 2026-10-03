@@ -49,6 +49,7 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent.parent
 CACHE_DIR = ROOT / ".cache" / "exa"  # real people's data - gitignored
 MOCK_PATH = ROOT / "mock_data" / "exa_people_search.json"
+MOCK_JOB_PATH = ROOT / "mock_data" / "job_posting.txt"
 
 
 class ExaCacheMiss(RuntimeError):
@@ -96,6 +97,43 @@ def _fetch(kwargs: dict, mode: str) -> list[dict]:
         "results": results,
     }, indent=2))
     return results
+
+
+class PageUnreadable(RuntimeError):
+    """Exa couldn't get the page's text - login wall, JS-only page, dead link."""
+
+
+def fetch_page(url: str, mode: str | None = None) -> str:
+    """Full text of one known URL via Exa's contents endpoint (job postings).
+
+    Same cache-first modes as search. The contents endpoint can return 200
+    while the URL itself failed, so the per-URL status is checked.
+    """
+    mode = mode or os.environ.get("EXA_MODE", "live")
+    if mode == "mock":
+        return MOCK_JOB_PATH.read_text()
+
+    kwargs = {"endpoint": "contents", "url": url, "text": True}
+    cache_path = _cache_path(kwargs)
+    if cache_path.exists():
+        return json.loads(cache_path.read_text())["text"]
+    if mode == "offline":
+        raise ExaCacheMiss(f"EXA_MODE=offline and no cached page for {url!r}")
+
+    api_key = os.environ.get("EXA_API_KEY")
+    if not api_key:
+        raise RuntimeError("EXA_API_KEY is not set - add it to .env, or set EXA_MODE=mock")
+
+    response = Exa(api_key=api_key).get_contents([url], text=True)
+    failed = [s for s in (response.statuses or []) if s.status != "success"]
+    text = response.results[0].text if response.results else ""
+    if failed or not (text or "").strip():
+        reason = failed[0].status if failed else "no text"
+        raise PageUnreadable(f"Couldn't read that page ({reason}) - paste the description text instead.")
+
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps({"request": kwargs, "text": text}, indent=2))
+    return text
 
 
 def _headline_from_text(text: str) -> str | None:

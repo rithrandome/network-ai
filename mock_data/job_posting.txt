@@ -1,0 +1,21 @@
+Machine Learning Engineer, Applied AI
+Northwind Analytics - Toronto, ON (Hybrid)
+Job ID: NW-2207
+
+About the team
+The Applied AI team builds the recommendation and forecasting systems behind
+Northwind's retail analytics products. We ship models to production weekly.
+
+What you'll do
+- Build and evaluate LLM-powered features, including retrieval-augmented generation
+- Own model training and retraining pipelines end to end
+- Work with product teams to turn ambiguous problems into measurable ML tasks
+
+What we're looking for
+- 3+ years of Python and production ML experience
+- Hands-on experience with PyTorch or scikit-learn
+- Experience building RAG systems or LLM agents
+- Familiarity with AWS (SageMaker, Bedrock) or equivalent cloud ML tooling
+- Clear written communication
+
+This is a fictional posting used as mock data.
