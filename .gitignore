@@ -5,3 +5,6 @@ __pycache__/
 
 # Exa response cache - real people's data, keep local only
 .cache/
+
+# Saved instances and your profile - real people's data, keep local only
+.data/
