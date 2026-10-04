@@ -25,7 +25,7 @@ from typing import Literal
 
 from dotenv import load_dotenv
 from langchain_core.language_models import BaseChatModel
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel
 
 load_dotenv()
@@ -49,6 +49,14 @@ OPENAI_MODELS: dict[Role, str] = {
 # a full profile runs 3-4k tokens, so without this the model never sees
 # most of the Experience section.
 OLLAMA_CONTEXT_TOKENS = 8192
+
+# A 1B model can loop inside one string ("They have experience in...") until it
+# fills the context window, which cuts the JSON off and fails the step. Every
+# string in an extract schema sent to Ollama gets this maxLength, and its grammar closes
+# the string at the cap. Long enough for any resume bullet. Cloud strict modes
+# reject or ignore maxLength and don't loop like this, so they get the plain
+# schema. List loops are capped in the schemas themselves (schemas.Capped).
+OLLAMA_MAX_STRING_CHARS = 800
 
 
 def provider(role: Role = "extract") -> str:
@@ -94,8 +102,32 @@ def get_model(role: Role) -> BaseChatModel:
                       temperature=0, num_ctx=OLLAMA_CONTEXT_TOKENS)
 
 
+def _cap_strings(node, cap: int):
+    if isinstance(node, dict):
+        node = {k: _cap_strings(v, cap) for k, v in node.items()}
+        if node.get("type") == "string" and "enum" not in node:
+            node["maxLength"] = min(node.get("maxLength", cap), cap)
+    elif isinstance(node, list):
+        node = [_cap_strings(v, cap) for v in node]
+    return node
+
+
+def _drop_cut(node, cap: int):
+    """List items that reached the cap were cut off mid-thought - drop them."""
+    if isinstance(node, dict):
+        return {k: _drop_cut(v, cap) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_drop_cut(v, cap) for v in node if not (isinstance(v, str) and len(v) >= cap)]
+    return node
+
+
 def structured(role: Role, schema: type[BaseModel]) -> Runnable:
-    return get_model(role).with_structured_output(schema, method="json_schema")
+    model = get_model(role)
+    if role != "extract" or not is_local(role):  # a draft body can be longer than the cap
+        return model.with_structured_output(schema, method="json_schema")
+    capped = _cap_strings(schema.model_json_schema(), OLLAMA_MAX_STRING_CHARS)
+    return (model.with_structured_output(capped, method="json_schema")
+            | RunnableLambda(lambda raw: schema.model_validate(_drop_cut(raw, OLLAMA_MAX_STRING_CHARS))))
 
 
 def is_local(role: Role) -> bool:

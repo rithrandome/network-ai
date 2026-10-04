@@ -84,7 +84,13 @@ that reject it too - they get `reasoning_effort=low` instead, since a
 default: on the same mock draft it cost $0.003 against GPT-5.5's $0.008 and
 kept the story GPT-5.5 dropped, and Astra (5x Sol's price) wrote the same
 text. Ollama's `num_ctx` is raised to 8192 because its
-default 2048-token window silently truncates a full profile.
+default 2048-token window silently truncates a full profile. A 1B model can also
+fall into a loop, repeating a fact until it fills the window and cuts the JSON
+off. So model-filled lists carry a `maxItems` and reading steps on Ollama get a
+`maxLength` on every string, both enforced by Ollama's grammar while
+generating. Items that hit the cap or repeat themselves are dropped. The
+profile summary and suggestions are optional, so if either still fails, the
+knobs open anyway with a warning.
 
 **Knobs as structured choices, not an "add context" box.** Context boxes go
 unused, and output quality depends on context. So every knob is a pick from a

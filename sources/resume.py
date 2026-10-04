@@ -33,7 +33,7 @@ from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 
 from llm import structured
-from schemas import Certification, Education, Entry, Me
+from schemas import Capped, Certification, Education, Entry, Me
 from validators import content_words
 
 MAX_SECTION_CHARS = 6_000
@@ -143,27 +143,27 @@ class _Basics(BaseModel):
     summary: str = Field(default="", description="Their summary or about text, copied")
 
 
-class _Job(BaseModel):
+class _Job(Capped):
     title: str = Field(description="Job title, copied exactly")
     company: str = Field(description="Company name, copied exactly")
     location: str = ""
     start: str = Field(default="", description="Start date as written, e.g. Aug 2023")
     end: str = Field(default="", description="End date as written, or Present")
-    bullets: list[str] = Field(default_factory=list, description="Each achievement sentence, copied word for word")
+    bullets: list[str] = Field(default_factory=list, max_length=15, description="Each achievement sentence, copied word for word")
 
 
-class _Jobs(BaseModel):
-    jobs: list[_Job]
+class _Jobs(Capped):
+    jobs: list[_Job] = Field(max_length=20)
 
 
-class _Project(BaseModel):
+class _Project(Capped):
     name: str = Field(description="Project name, copied exactly")
     context: str = Field(default="", description="Where it was done or the tech used, as written")
-    bullets: list[str] = Field(default_factory=list, description="Each sentence about the project, copied word for word")
+    bullets: list[str] = Field(default_factory=list, max_length=15, description="Each sentence about the project, copied word for word")
 
 
-class _Projects(BaseModel):
-    projects: list[_Project]
+class _Projects(Capped):
+    projects: list[_Project] = Field(max_length=20)
 
 
 class _School(BaseModel):
@@ -171,8 +171,8 @@ class _School(BaseModel):
     degree: str = Field(default="", description="The whole degree text, copied exactly")
 
 
-class _Certs(BaseModel):
-    certifications: list[Certification]
+class _Certs(Capped):
+    certifications: list[Certification] = Field(max_length=30)
 
 
 RULES = """Rules:

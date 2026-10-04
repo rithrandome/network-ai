@@ -120,13 +120,21 @@ def goal_stage(me: Me) -> None:
         wants_job = inst.settings.get("status") in ROLE_STATUSES and job_text
         if wants_job and (not inst.job or inst.job.input != job_text) and not read_role(job_text, exa_mode()):
             return
-        try:
-            with st.spinner("Reading their profile and suggesting knobs..."):
+        with st.spinner("Reading their profile and suggesting knobs..."):
+            # Both are suggestions, not requirements: if one fails, the knobs
+            # still work with code-matched items and whatever the user picks.
+            failed = []
+            try:
                 inst.suggestions = suggest(inst, me)
+            except Exception as exc:
+                failed.append(f"suggestions ({type(exc).__name__})")
+            try:
                 inst.brief = write_brief(inst.person)
-        except Exception as exc:
-            st.error(f"The model call failed: {exc}")
-            return
+            except Exception as exc:
+                failed.append(f"profile summary ({type(exc).__name__})")
+        if failed:
+            state.suggest_warning = (f"Couldn't get {' or '.join(failed)} from {describe('extract')}. "
+                                     "The knobs still work - pick what fits.")
         seed_knobs(inst, me)
         state.stage = "knobs"
         st.rerun()
@@ -134,6 +142,8 @@ def goal_stage(me: Me) -> None:
 
 def knobs_stage(me: Me) -> None:
     inst = state.inst
+    if warning := state.pop("suggest_warning", None):
+        st.warning(warning)
     knob_panel(me, f"new:{inst.id}", exa_mode())
     if st.button("Create and write the first draft", type="primary"):
         try:

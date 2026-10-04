@@ -48,12 +48,45 @@ class Candidate(BaseModel):
         return self.roles[0] if self.roles else None
 
 
-class Brief(BaseModel):
+def looped(text: str, run: int = 8) -> bool:
+    """True if any run of words repeats - the mark of a model stuck in a loop."""
+    words = text.lower().split()
+    runs = [tuple(words[i:i + run]) for i in range(len(words) - run + 1)]
+    return len(runs) != len(set(runs))
+
+
+class Capped(BaseModel):
+    """A model the model fills in, with every list capped by max_length.
+
+    A small model can fall into a loop ("They have experience in the field
+    of...") and repeat an item until it runs out of tokens, cutting the JSON
+    off mid-string. The cap is in the JSON schema, so constrained decoding
+    (Ollama's grammar) closes the list once it's full. Providers that don't
+    enforce maxItems are trimmed here before validation instead of failing.
+    A string that loops until its own length cap (see llm.py) is dropped.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _trim_lists(cls, data):
+        if not isinstance(data, dict):
+            return data
+        for name, field in cls.model_fields.items():
+            cap = next((m.max_length for m in field.metadata if getattr(m, "max_length", None)), None)
+            value = data.get(name)
+            if isinstance(value, list):
+                value = [v for v in value if not (isinstance(v, str) and looped(v))]
+                data = {**data, name: value[:cap] if cap else value}
+        return data
+
+
+class Brief(Capped):
     """What you need to know about the person before reaching out."""
 
     summary: str = Field(description="A short, plain-language summary of who the person is")
-    facts: list[str] = Field(description="Two specific, interesting facts taken from the profile")
+    facts: list[str] = Field(max_length=3, description="Two specific, interesting facts taken from the profile")
     icebreakers: list[str] = Field(
+        max_length=3,
         description="Two conversation openers that reference something specific in the profile"
     )
 
@@ -177,7 +210,7 @@ class Me(BaseModel):
 
 # --- The role ------------------------------------------------------------------
 
-class JobPosting(BaseModel):
+class JobPosting(Capped):
     """A job description, pasted or fetched from a link, reduced to what a
     message can use."""
 
@@ -185,7 +218,7 @@ class JobPosting(BaseModel):
     company: str | None = Field(default=None, description="Hiring company")
     job_id: str | None = Field(default=None, description="Requisition / job ID if the posting shows one")
     location: str | None = None
-    requirements: list[str] = Field(default_factory=list,
+    requirements: list[str] = Field(default_factory=list, max_length=8,
                                     description="Up to five of the most important requirements, short phrases")
 
 
@@ -205,14 +238,15 @@ class JobSource(BaseModel):
 TheirRole = Literal[tuple(THEIR_ROLE.options)]  # type: ignore[valid-type]
 
 
-class Suggestions(BaseModel):
+class Suggestions(Capped):
     role_guess: TheirRole = Field(description="Which of the fixed categories this person is to the sender")
     role_reason: str = Field(description="One short phrase quoting the profile evidence for role_guess")
     common_ground: list[str] = Field(
+        max_length=5,
         description="Things the sender and this person genuinely share (school, employer, city, community), "
                     "each a short phrase. Empty if there is nothing real.")
-    hooks: list[str] = Field(description="Up to three specific things about this person or their work to reference")
-    ask_wording: list[str] = Field(description="Two or three concrete asks that fit the goal, each a short phrase")
+    hooks: list[str] = Field(max_length=3, description="Up to three specific things about this person or their work to reference")
+    ask_wording: list[str] = Field(max_length=3, description="Two or three concrete asks that fit the goal, each a short phrase")
 
 
 # --- The instance --------------------------------------------------------------
