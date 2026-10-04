@@ -70,8 +70,8 @@ developing; `EXA_MODE=mock` uses a fictional fixture with no key at all.
 **Models by role, local by default.** Steps ask `llm.py` for an `extract` or
 `compose` model, not a model name, and each role picks its own provider
 (`EXTRACT_PROVIDER` / `COMPOSE_PROVIDER`, defaulting to `LLM_PROVIDER`):
-`ollama` (local, free), `anthropic` (Haiku / Sonnet) or `openai` (GPT-5 mini /
-GPT-5). The useful split is reading locally and writing in the cloud: resumes
+`ollama` (local, free), `anthropic` (Haiku / Sonnet) or `openai` (GPT-5.4 mini /
+GPT-5.5). The useful split is reading locally and writing in the cloud: resumes
 and profiles never leave the machine, and the paid model is spent only on the
 draft, where writing quality is the product. Every backend uses constrained
 decoding (`method="json_schema"`: Ollama's format parameter, Claude's

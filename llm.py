@@ -41,8 +41,8 @@ CLAUDE_MODELS: dict[Role, str] = {
     "compose": os.environ.get("CLAUDE_COMPOSE_MODEL") or os.environ.get("COMPOSE_MODEL") or "claude-sonnet-5",
 }
 OPENAI_MODELS: dict[Role, str] = {
-    "extract": os.environ.get("OPENAI_EXTRACT_MODEL") or "gpt-5-mini",
-    "compose": os.environ.get("OPENAI_COMPOSE_MODEL") or "gpt-5",
+    "extract": os.environ.get("OPENAI_EXTRACT_MODEL") or "gpt-5.4-mini",
+    "compose": os.environ.get("OPENAI_COMPOSE_MODEL") or "gpt-5.5",
 }
 
 # Ollama's default context window is 2048 tokens and it truncates silently -
