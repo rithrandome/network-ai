@@ -70,17 +70,20 @@ developing; `EXA_MODE=mock` uses a fictional fixture with no key at all.
 **Models by role, local by default.** Steps ask `llm.py` for an `extract` or
 `compose` model, not a model name, and each role picks its own provider
 (`EXTRACT_PROVIDER` / `COMPOSE_PROVIDER`, defaulting to `LLM_PROVIDER`):
-`ollama` (local, free), `anthropic` (Haiku / Sonnet) or `openai` (GPT-5.4 mini /
-GPT-5.5). The useful split is reading locally and writing in the cloud: resumes
+`ollama` (local, free), `anthropic` (Haiku / Sonnet) or `openai` (GPT-6 Luna /
+GPT-6.1 Sol). The useful split is reading locally and writing in the cloud: resumes
 and profiles never leave the machine, and the paid model is spent only on the
 draft, where writing quality is the product. Every backend uses constrained
 decoding (`method="json_schema"`: Ollama's format parameter, Claude's
 structured outputs, OpenAI's strict mode), so the schema is enforced while
 generating - a 1B model given format instructions in the prompt echoes the
 schema instead of filling it in. No temperature is passed to Claude: Sonnet 5
-rejects sampling parameters, and GPT-5-family models are reasoning models
+rejects sampling parameters, and GPT-5-and-later models are reasoning models
 that reject it too - they get `reasoning_effort=low` instead, since a
-300-character note doesn't need seconds of thinking. Ollama's `num_ctx` is raised to 8192 because its
+300-character note doesn't need seconds of thinking. Sol is the writing
+default: on the same mock draft it cost $0.003 against GPT-5.5's $0.008 and
+kept the story GPT-5.5 dropped, and Astra (5x Sol's price) wrote the same
+text. Ollama's `num_ctx` is raised to 8192 because its
 default 2048-token window silently truncates a full profile.
 
 **Knobs as structured choices, not an "add context" box.** Context boxes go

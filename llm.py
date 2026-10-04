@@ -41,8 +41,8 @@ CLAUDE_MODELS: dict[Role, str] = {
     "compose": os.environ.get("CLAUDE_COMPOSE_MODEL") or os.environ.get("COMPOSE_MODEL") or "claude-sonnet-5",
 }
 OPENAI_MODELS: dict[Role, str] = {
-    "extract": os.environ.get("OPENAI_EXTRACT_MODEL") or "gpt-5.4-mini",
-    "compose": os.environ.get("OPENAI_COMPOSE_MODEL") or "gpt-5.5",
+    "extract": os.environ.get("OPENAI_EXTRACT_MODEL") or "gpt-6-luna",
+    "compose": os.environ.get("OPENAI_COMPOSE_MODEL") or "gpt-6.1-sol",
 }
 
 # Ollama's default context window is 2048 tokens and it truncates silently -
@@ -82,10 +82,10 @@ def get_model(role: Role) -> BaseChatModel:
 
         _require_key("OPENAI_API_KEY", role)
         model = OPENAI_MODELS[role]
-        # GPT-5-family models are reasoning models: they reject temperature, and
+        # GPT-5 and later are reasoning models: they reject temperature, and
         # their default effort spends seconds thinking about a 300-character note.
         effort = os.environ.get("OPENAI_REASONING_EFFORT", "low")
-        reasoning = model.startswith(("gpt-5", "o1", "o3", "o4"))
+        reasoning = not model.startswith(("gpt-4", "gpt-3"))
         return ChatOpenAI(model=model, **({"reasoning_effort": effort} if reasoning else {"temperature": 0}))
 
     from langchain_ollama import ChatOllama
