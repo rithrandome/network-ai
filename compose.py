@@ -147,7 +147,7 @@ def compose(instance: Instance, me: Me, refine: str = "", base: DraftVersion | N
         refine=refine,
         problems=problems,
         attempts=attempt,
-        model=describe(),
+        model=describe("compose"),
         created_at=now(),
     )
 

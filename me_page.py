@@ -21,7 +21,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from llm import describe, provider
+from llm import describe, is_local, vendor
 from schemas import Certification, Education, Entry, Me
 from sources.resume import ResumeUnreadable, build_profile, read_text
 from store import load_me
@@ -94,11 +94,11 @@ def strength(me: Me) -> tuple[float, str]:
 # --- Upload ----------------------------------------------------------------------------
 
 def privacy_note() -> None:
-    if provider() == "anthropic":
-        st.caption(f"Your file is read by {describe()}: its text is sent to Anthropic's API. "
-                   "The profile is stored only in this app's local database.")
+    if is_local("extract"):
+        st.caption(f"Your file is read by {describe('extract')} on this machine. Nothing leaves it.")
     else:
-        st.caption(f"Your file is read by {describe()} on this machine. Nothing leaves it.")
+        st.caption(f"Your file is read by {describe('extract')}: its text is sent to {vendor('extract')}'s "
+                   "API. The profile is stored only in this app's local database.")
 
 
 def _build(name: str, data: bytes, existing: Me | None) -> None:

@@ -68,14 +68,19 @@ lookup never spends credit twice. `EXA_MODE=offline` guarantees no spend while
 developing; `EXA_MODE=mock` uses a fictional fixture with no key at all.
 
 **Models by role, local by default.** Steps ask `llm.py` for an `extract` or
-`compose` model, not a model name. `LLM_PROVIDER=ollama` (default) runs
-everything on a local model at no cost; `anthropic` uses Haiku for extraction
-and Sonnet for writing drafts, where quality is the product. Both backends use
-constrained decoding (`method="json_schema"`: Ollama's format parameter,
-Claude's native structured outputs), so the schema is enforced while
+`compose` model, not a model name, and each role picks its own provider
+(`EXTRACT_PROVIDER` / `COMPOSE_PROVIDER`, defaulting to `LLM_PROVIDER`):
+`ollama` (local, free), `anthropic` (Haiku / Sonnet) or `openai` (GPT-5 mini /
+GPT-5). The useful split is reading locally and writing in the cloud: resumes
+and profiles never leave the machine, and the paid model is spent only on the
+draft, where writing quality is the product. Every backend uses constrained
+decoding (`method="json_schema"`: Ollama's format parameter, Claude's
+structured outputs, OpenAI's strict mode), so the schema is enforced while
 generating - a 1B model given format instructions in the prompt echoes the
 schema instead of filling it in. No temperature is passed to Claude: Sonnet 5
-rejects sampling parameters. Ollama's `num_ctx` is raised to 8192 because its
+rejects sampling parameters, and GPT-5-family models are reasoning models
+that reject it too - they get `reasoning_effort=low` instead, since a
+300-character note doesn't need seconds of thinking. Ollama's `num_ctx` is raised to 8192 because its
 default 2048-token window silently truncates a full profile.
 
 **Knobs as structured choices, not an "add context" box.** Context boxes go
@@ -155,7 +160,7 @@ so it lives in the gitignored `.data/`.
 On gemma3:1b the whole loop runs, but drafts often still fail a check (it
 won't reliably state the role it was told to lead with); the checks report it
 rather than hide it. Drafting is the step a bigger model is for:
-`LLM_PROVIDER=anthropic` or a larger `OLLAMA_MODEL`.
+`COMPOSE_PROVIDER=openai` / `anthropic`, or a larger `OLLAMA_MODEL`.
 
 ## Run it
 
@@ -185,7 +190,7 @@ uv run python -m sources.exa_client "Name, company, city"   # candidate lookup o
 - `compose.py` - knobs -> plan -> draft, with the validate/retry loop
 - `validators.py` - the deterministic checks
 - `store.py` - SQLite persistence (instances, your profile)
-- `llm.py` - model per role, Ollama or Claude, structured output
+- `llm.py` - provider and model per role (Ollama, Claude, OpenAI), structured output
 - `sources/exa_client.py` - Exa people search and page fetch (exa-py), cache/offline/mock modes
 - `sources/job_posting.py` - job link or pasted JD -> `JobPosting`
 - `sources/resume.py` - resume / LinkedIn PDF, DOCX or text -> `Me` (`uv run python -m sources.resume file.pdf`)
