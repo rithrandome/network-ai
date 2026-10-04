@@ -71,9 +71,16 @@ developing; `EXA_MODE=mock` uses a fictional fixture with no key at all.
 `compose` model, not a model name, and each role picks its own provider
 (`EXTRACT_PROVIDER` / `COMPOSE_PROVIDER`, defaulting to `LLM_PROVIDER`):
 `ollama` (local, free), `anthropic` (Haiku / Sonnet) or `openai` (GPT-6 Luna /
-GPT-6.1 Sol). The useful split is reading locally and writing in the cloud: resumes
-and profiles never leave the machine, and the paid model is spent only on the
-draft, where writing quality is the product. Every backend uses constrained
+GPT-6.1 Sol). The recommended setup is GPT-6 Luna for reading and Sol for writing.
+gemma3:1b stays the code default so the app runs with no keys, but it limits
+everything downstream: on the same profile its facts were generic, its
+"openers" were copies of the summary, and its suggested asks ignored the goal,
+while Luna pulled specific numbers and asks that fit. Hooks and facts are what
+a draft is built from, so a better writer can't make up for weak reading.
+Luna costs about $0.0005 per person researched and $0.001 per resume, and it
+was faster. The trade-off is privacy: resumes and profiles go to OpenAI
+instead of staying on the machine. Setting `EXTRACT_PROVIDER=ollama` keeps
+reading local. Every backend uses constrained
 decoding (`method="json_schema"`: Ollama's format parameter, Claude's
 structured outputs, OpenAI's strict mode), so the schema is enforced while
 generating - a 1B model given format instructions in the prompt echoes the
