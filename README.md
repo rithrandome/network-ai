@@ -133,7 +133,7 @@ degree per date range (every degree has one, in every format; font sizes exist
 only in PDFs and templates bold different things), and the degree line is kept
 whole - majors and minors are written too many ways to split. A certification
 name that isn't in the file is dropped, not flagged - a made-up certification
-is worse than a missing one, and the Me page has a table for adding any. A re-upload
+is worse than a missing one, and the profile page has a table for adding any. A re-upload
 replaces what came from the file and keeps your stories and edits.
 
 **The profile reaches drafts as facts, not as a resume.** Your bullets are
@@ -212,4 +212,4 @@ uv run python -m sources.exa_client "Name, company, city"   # candidate lookup o
 - `sources/resume.py` - resume / LinkedIn PDF, DOCX or text -> `Me` (`uv run python -m sources.resume file.pdf`)
 - `schemas.py` - the data models
 - `mock_data/` - fictional Exa response (two Jane Does), a fictional job posting, and a
-  fictional resume and LinkedIn profile (Alex Tester) - "Use the sample resume" on the Me page
+  fictional resume and LinkedIn profile (Alex Tester) - "Use the sample resume" on the profile page (/profile)

@@ -1,13 +1,16 @@
 """Streamlit front end for network-ai.
 
 Each person you reach out to is an instance - saved until you delete it.
-  Sidebar     your instances (newest first), + New, Me; under them, the open
-              instance's knobs
+  /           + New and the playground; the sidebar lists your instances
+              (newest first) and, under them, the open instance's knobs
+  /profile    the person icon, top right
   + New       search -> pick the person -> goal (-> status -> the role) ->
               suggestions -> knobs -> first draft
   Playground  the brief, draft versions, regenerate, refine, copy, delete
-  Me          upload a resume or LinkedIn PDF -> review -> add stories over
+  Profile     upload a resume or LinkedIn PDF -> review -> add stories over
               time (me_page.py); shared by every instance
+  /settings   the gear icon, top right: which models read and write, and
+              where your data goes
 
 Run:  uv run streamlit run app.py
 """
@@ -19,7 +22,7 @@ import streamlit as st
 from compose import compose
 from knob_ui import goal_and_status, knob_panel, read_role
 from knobs import CHANNELS, ROLE_STATUSES
-from llm import describe
+from llm import describe, is_local, vendor
 from me_page import me_page
 from pipeline import find_candidates, seed_knobs, write_brief
 from schemas import Me
@@ -35,10 +38,12 @@ state.setdefault("dirty", False)
 
 
 def go(view: str) -> None:
+    """Open + New or a saved instance - both live on the home page."""
     state.view = view
-    state.inst = load_instance(view) if view not in ("new", "me") else None
+    state.inst = load_instance(view) if view != "new" else None
     if view == "new":
         state.stage = "search"
+    state.go_home = True
 
 
 def exa_mode() -> str | None:
@@ -46,7 +51,7 @@ def exa_mode() -> str | None:
 
 
 # Widget callbacks run before the script - save their edits before anything renders.
-if state.dirty and state.view not in ("new", "me") and state.get("inst"):
+if state.dirty and state.view != "new" and state.get("inst"):
     save_instance(state.inst)
 state.dirty = False
 if state.get("me_dirty"):
@@ -56,17 +61,15 @@ if state.get("me_dirty"):
 
 # --- Sidebar -----------------------------------------------------------------------
 
-with st.sidebar:
-    st.title("network-ai 🤝")
-    new_col, me_col = st.columns(2)
-    new_col.button("+ New", on_click=go, args=("new",), width="stretch",
-                   type="primary" if state.view == "new" else "secondary")
-    me_col.button("Me", on_click=go, args=("me",), width="stretch",
-                  type="primary" if state.view == "me" else "secondary")
-    for saved in list_instances():
-        st.button(saved.title, key=f"open:{saved.id}", on_click=go, args=(saved.id,), width="stretch",
-                  type="primary" if state.view == saved.id else "tertiary")
-    st.caption(f"Model: {describe()}")
+def sidebar(on_home: bool) -> None:
+    """The open instance is highlighted only on the home page."""
+    with st.sidebar:
+        st.title("network-ai 🤝")
+        st.button("+ New", on_click=go, args=("new",), width="stretch",
+                  type="primary" if on_home and state.view == "new" else "secondary")
+        for saved in list_instances():
+            st.button(saved.title, key=f"open:{saved.id}", on_click=go, args=(saved.id,), width="stretch",
+                      type="primary" if on_home and state.view == saved.id else "tertiary")
 
 
 # --- + New ---------------------------------------------------------------------------
@@ -114,7 +117,7 @@ def goal_stage(me: Me) -> None:
     if not inst.settings.get("goal"):
         return
     if not me.entries and not me.highlights:
-        st.info("Tip: upload your resume on the Me page first - its bullets become credibility items.")
+        st.info("Tip: upload your resume on your profile (top right) first - its bullets become credibility items.")
     if st.button("Next: suggest the rest", type="primary"):
         job_text = state.get(f"{prefix}:job", "").strip()
         wants_job = inst.settings.get("status") in ROLE_STATUSES and job_text
@@ -251,15 +254,51 @@ def playground(me: Me) -> None:
                 generate(me, refine=refine, base=draft)
 
 
+# --- Settings ------------------------------------------------------------------------
+
+def settings_page() -> None:
+    st.header("Settings")
+    st.subheader("Models")
+    for role, label, used_for in (
+            ("extract", "Reading", "your resume, job postings, the person's profile, knob suggestions"),
+            ("compose", "Writing", "every draft, including retries")):
+        where = "runs on this machine" if is_local(role) else f"text is sent to {vendor(role)}'s API"
+        st.markdown(f"**{label}:** {describe(role)}  \n{used_for} - {where}")
+    st.caption("Set in `.env` - `EXTRACT_PROVIDER` / `COMPOSE_PROVIDER` (ollama, anthropic or openai) and the "
+               "model names for each. Restart the app after editing it; `.env` is read at startup.")
+
+
 # --- Route ---------------------------------------------------------------------------
 
-me = state.me if "me" in state else load_me()
-if state.view == "me":
+def home() -> None:
+    me = state.me if "me" in state else load_me()
+    if state.view == "new":
+        new_page(me)
+    elif state.get("inst"):
+        playground(me)
+    else:
+        go("new")
+        st.rerun()
+
+
+def profile() -> None:
     me_page(bool(state.get("use_mock", not os.environ.get("EXA_API_KEY"))))
-elif state.view == "new":
-    new_page(me)
-elif state.get("inst"):
-    playground(me)
-else:
-    go("new")
-    st.rerun()
+
+
+HOME = st.Page(home, title="network-ai", icon="🤝", default=True)
+PROFILE = st.Page(profile, title="Profile", icon=":material/account_circle:", url_path="profile")
+SETTINGS = st.Page(settings_page, title="Settings", icon=":material/settings:", url_path="settings")
+# Hidden: the sidebar is the instance list, and the icons below are the way to
+# the other two pages.
+page = st.navigation([HOME, PROFILE, SETTINGS], position="hidden")
+
+# A sidebar click opens an instance, which lives on the home page.
+if state.pop("go_home", False) and page.url_path != HOME.url_path:
+    st.switch_page(HOME)
+
+sidebar(on_home=page.url_path == HOME.url_path)
+with st.container(horizontal=True, horizontal_alignment="right"):
+    st.page_link(PROFILE, label="", icon=":material/account_circle:", help="Profile")
+    st.page_link(SETTINGS, label="", icon=":material/settings:", help="Settings")
+
+page.run()

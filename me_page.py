@@ -1,4 +1,4 @@
-"""The Me page: upload a resume or LinkedIn PDF, review what was read, deepen it.
+"""The profile page (/profile): upload a resume or LinkedIn PDF, review what was read, deepen it.
 
 Built for getting started fast and going deeper later:
   - Upload first, no form. One file gives a usable profile, and a usable
@@ -260,7 +260,7 @@ def review_screen(me: Me, mock: bool) -> None:
 
 
 def me_page(mock: bool) -> None:
-    st.header("Me")
+    st.header("Profile")
     me = _me()
     if not (me.name or me.entries):
         upload_screen(mock)
