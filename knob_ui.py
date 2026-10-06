@@ -12,16 +12,15 @@ settings take custom text, and every item list accepts your own entries.
 
 import streamlit as st
 
-from knobs import (CHANNEL, CHANNELS, GOAL, INGREDIENTS, LEVEL_LABELS, LEVELS, ROLE_STATUSES, STATUS,
-                   THEIR_ROLE, TONE, Ingredient, Setting, rule_for, warnings_for)
-from pipeline import change_goal, role_item
-from profile_match import rank_credibility
+from knobs import (CHANNEL, CUSTOM_OK, GOAL, INGREDIENTS, LEVEL_LABELS, LEVELS, ROLE_STATUSES, STATUS,
+                   THEIR_ROLE, TONE, Ingredient, Setting, rule_for)
+from pipeline import (ingredient_options, knob_warnings, role_item, set_job, set_level, set_setting,
+                      story_entry)
 from schemas import IngredientState, Instance, Me
 from sources.exa_client import PageUnreadable
 from sources.job_posting import read_job
 from store import save_me
 
-CUSTOM_OK = {"goal", "their_role", "tone"}
 SUGGESTED = " ✦"
 JOB_PLACEHOLDER = "Paste the job link, or the description itself if the link is login-walled"
 
@@ -37,11 +36,7 @@ def _touch() -> None:
 # --- Settings ------------------------------------------------------------------
 
 def _set_setting(key: str, value: str) -> None:
-    inst = _inst()
-    if key == "goal":
-        change_goal(inst, value)
-    else:
-        inst.settings[key] = value
+    set_setting(_inst(), key, value)
     _touch()
 
 
@@ -89,11 +84,7 @@ def read_role(value: str, mode: str | None) -> bool:
     except PageUnreadable as exc:
         st.error(str(exc))
         return False
-    old = role_item(inst.job.posting) if inst.job else None
-    inst.job = job
-    role = inst.ingredients.get("role")
-    if role is not None:
-        role.items = [role_item(job.posting), *(i for i in role.items if i != old)]
+    set_job(inst, job)
     _touch()
     return True
 
@@ -114,29 +105,8 @@ def job_widget(prefix: str, mode: str | None, button: bool = True) -> None:
 
 # --- Ingredients -------------------------------------------------------------------
 
-def ingredient_options(inst: Instance, me: Me) -> tuple[dict[str, list[str]], set[str]]:
-    """Pickable items per ingredient, and which of them are model suggestions."""
-    s, brief = inst.suggestions, inst.brief
-    suggested = {
-        "ask": s.ask_wording if s else [],
-        "common_ground": s.common_ground if s else [],
-        # The suggestion filter often leaves no hooks; the brief's facts are
-        # grounded in the profile too.
-        "hook": [*(s.hooks if s else []), *(brief.facts if brief else [])],
-    }
-    options = {**suggested,
-               "credibility": rank_credibility(me, inst),
-               "role": [role_item(inst.job.posting)] if inst.job else []}
-    return options, {item for items in suggested.values() for item in items}
-
-
 def _on_level(key: str, wkey: str) -> None:
-    inst, level = _inst(), st.session_state[wkey]
-    if level == "lead":
-        for other, state in inst.ingredients.items():
-            if other != key and state.level == "lead":
-                state.level = "mention"
-    inst.ingredients[key].level = level
+    set_level(_inst(), key, st.session_state[wkey])
     _touch()
 
 
@@ -145,10 +115,10 @@ def _on_items(key: str, wkey: str) -> None:
     _touch()
 
 
-def story_nudge(me: Me, items: list[str], prefix: str) -> None:
+def story_nudge(me: Me, prefix: str) -> None:
     """Ask for a story at the moment it pays off: a draft is about to use an
     entry that has none. One entry at a time, never blocking."""
-    entry = next((e for e in map(me.entry_for, items) if e and not e.story.strip()), None)
+    entry = story_entry(_inst(), me)
     if not entry:
         return
     with st.popover(f"✍️ Add the story behind {entry.label}?", width="stretch"):
@@ -181,19 +151,12 @@ def ingredient_widget(ing: Ingredient, prefix: str, options: list[str], suggeste
                          format_func=LEVEL_LABELS.get, label_visibility="collapsed")
         if state.level != "off" and not state.items and ing.key != "ask":
             st.caption("Nothing selected - the draft won't use this.")
-        if ing.key == "credibility" and me and state.level != "off":
-            story_nudge(me, state.items, prefix)
+        if ing.key == "credibility" and me:
+            story_nudge(me, prefix)
 
 
-def knob_warnings(inst: Instance) -> None:
-    notes = warnings_for(inst.settings)
-    channel = inst.settings.get("channel")
-    if channel == "LinkedIn note":
-        loud = [k for k, s in inst.ingredients.items() if s.level in ("mention", "lead") and s.items]
-        if len(loud) > 2:
-            notes.append(f"A {CHANNELS[channel].max_chars}-character note fits about two things at "
-                         f"Mention or Lead - you have {len(loud)}.")
-    for note in notes:
+def show_warnings(inst: Instance) -> None:
+    for note in knob_warnings(inst):
         st.warning(note, icon="⚠️")
 
 
@@ -222,4 +185,4 @@ def knob_panel(me: Me, prefix: str, mode: str | None) -> None:
     options, suggested = ingredient_options(inst, me)
     for ing in INGREDIENTS:
         ingredient_widget(ing, prefix, options.get(ing.key, []), suggested, me)
-    knob_warnings(inst)
+    show_warnings(inst)

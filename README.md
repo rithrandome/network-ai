@@ -178,6 +178,19 @@ won't reliably state the role it was told to lead with); the checks report it
 rather than hide it. Drafting is the step a bigger model is for:
 `COMPOSE_PROVIDER=openai` / `anthropic`, or a larger `OLLAMA_MODEL`.
 
+**FastAPI in front of the same pipeline, for a React front end.** Streamlit
+reruns the whole script on every click, which fights a knob-heavy UI. The API
+(`api/`) holds no logic: routes load, call the functions Streamlit calls, save
+and return. FastAPI over Flask because the Pydantic models already exist - they
+become the request/response contract, `/docs` and the generated TypeScript
+types for free. Over Django because there are no users, admin or ORM to want.
+Every change returns the instance plus its options, warnings and story prompt,
+so the front end never re-derives a knob rule. Routes are sync `def`: model and
+search calls block, and FastAPI runs those in a thread pool. Errors map to
+status codes: unreadable resume or page 422, offline cache miss 409, a failed
+model or search call 502. Unlike Streamlit (saved on the first draft), the API
+saves an instance when it's created.
+
 ## Run it
 
 Requires [Ollama](https://ollama.com) running locally:
@@ -191,6 +204,8 @@ EXA_MODE=mock uv run python pipeline.py      # CLI brief, fictional data, no key
 EXA_MODE=mock uv run python compose.py       # CLI draft: prints the rendered plan and the checked draft
 uv run streamlit run app.py                  # app; live search if EXA_API_KEY is set, else mock
 uv run python -m sources.exa_client "Name, company, city"   # candidate lookup only
+uv run fastapi dev api/main.py               # API; try it at http://127.0.0.1:8000/docs
+uv run pytest                                # API tests: mock search, stubbed models, temp DB
 ```
 
 ## Files
@@ -211,5 +226,8 @@ uv run python -m sources.exa_client "Name, company, city"   # candidate lookup o
 - `sources/job_posting.py` - job link or pasted JD -> `JobPosting`
 - `sources/resume.py` - resume / LinkedIn PDF, DOCX or text -> `Me` (`uv run python -m sources.resume file.pdf`)
 - `schemas.py` - the data models
+- `api/` - FastAPI: `main.py` (app), `instances.py`, `profile.py`, `meta.py` (settings, knob
+  registry, search), `models.py` (request/response bodies), `errors.py` (status mapping)
+- `tests/test_api.py` - the API flow end to end, no keys or network
 - `mock_data/` - fictional Exa response (two Jane Does), a fictional job posting, and a
   fictional resume and LinkedIn profile (Alex Tester) - "Use the sample resume" on the profile page (/profile)

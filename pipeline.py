@@ -10,19 +10,23 @@ network-ai pipeline: describe a person -> pick the right candidate -> brief.
   seed_knobs(instance, me) / change_goal(instance, goal)
       goal rules + suggestions -> starting knob values, never overwriting
       anything the user already set
+  set_setting / set_level / set_job, ingredient_options, knob_warnings,
+  story_entry
+      the rules behind each knob edit, shared by the Streamlit widgets and
+      the API so neither front end carries its own copy
 
-The model comes from llm.py: local Ollama by default, Claude with
-LLM_PROVIDER=anthropic.
+The model comes from llm.py: each role (extract, compose) picks its own
+provider.
 
 Run:  EXA_MODE=mock uv run python pipeline.py
 """
 
 from langchain_core.prompts import PromptTemplate
 
-from knobs import DEFAULT_SETTINGS, INGREDIENT_KEYS, default_levels, rule_for
+from knobs import CHANNELS, DEFAULT_SETTINGS, INGREDIENT_KEYS, LEVELS, default_levels, rule_for, warnings_for
 from llm import structured
 from profile_match import rank_credibility
-from schemas import Brief, Candidate, IngredientState, Instance, JobPosting, Me
+from schemas import Brief, Candidate, Entry, IngredientState, Instance, JobPosting, JobSource, Me
 from sources.exa_client import find_person
 
 BRIEF_TEMPLATE = """
@@ -109,6 +113,74 @@ def change_goal(instance: Instance, goal: str) -> Instance:
                 instance.ingredients[key].level = "mention"
     instance.settings["goal"] = goal
     return instance
+
+
+# --- Knob edits ------------------------------------------------------------------
+
+def set_setting(instance: Instance, key: str, value: str) -> Instance:
+    if key == "goal":
+        return change_goal(instance, value)
+    instance.settings[key] = value
+    return instance
+
+
+def set_level(instance: Instance, key: str, level: str) -> Instance:
+    """Only one ingredient leads: a new Lead moves the old one to Mention."""
+    if level not in LEVELS:
+        raise ValueError(f"Unknown level {level!r} - use one of {', '.join(LEVELS)}")
+    if level == "lead":
+        for other, state in instance.ingredients.items():
+            if other != key and state.level == "lead":
+                state.level = "mention"
+    instance.ingredients.setdefault(key, IngredientState()).level = level
+    return instance
+
+
+def set_job(instance: Instance, job: JobSource) -> Instance:
+    """A new job replaces the old one's item in the role ingredient and keeps any the user typed."""
+    old = role_item(instance.job.posting) if instance.job else None
+    instance.job = job
+    role = instance.ingredients.get("role")
+    if role is not None:
+        role.items = [role_item(job.posting), *(i for i in role.items if i != old)]
+    return instance
+
+
+def ingredient_options(instance: Instance, me: Me) -> tuple[dict[str, list[str]], set[str]]:
+    """Pickable items per ingredient, and which of them are model suggestions."""
+    s, brief = instance.suggestions, instance.brief
+    suggested = {
+        "ask": s.ask_wording if s else [],
+        "common_ground": s.common_ground if s else [],
+        # The suggestion filter often leaves no hooks; the brief's facts are
+        # grounded in the profile too.
+        "hook": [*(s.hooks if s else []), *(brief.facts if brief else [])],
+    }
+    options = {**suggested,
+               "credibility": rank_credibility(me, instance),
+               "role": [role_item(instance.job.posting)] if instance.job else []}
+    return options, {item for items in suggested.values() for item in items}
+
+
+def knob_warnings(instance: Instance) -> list[str]:
+    """Combinations worth questioning - shown, never enforced."""
+    notes = warnings_for(instance.settings)
+    channel = instance.settings.get("channel")
+    if channel == "LinkedIn note":
+        loud = [k for k, s in instance.ingredients.items() if s.level in ("mention", "lead") and s.items]
+        if len(loud) > 2:
+            notes.append(f"A {CHANNELS[channel].max_chars}-character note fits about two things at "
+                         f"Mention or Lead - you have {len(loud)}.")
+    return notes
+
+
+def story_entry(instance: Instance, me: Me) -> Entry | None:
+    """The entry worth asking a story for right now: a picked credibility item
+    comes from it and it has none. One at a time."""
+    credibility = instance.ingredients.get("credibility")
+    if not credibility or credibility.level == "off":
+        return None
+    return next((e for e in map(me.entry_for, credibility.items) if e and not e.story.strip()), None)
 
 
 if __name__ == "__main__":

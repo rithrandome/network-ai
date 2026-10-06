@@ -6,6 +6,8 @@
                                   recipient's profile. Ties keep resume order.
   shared_ground(me, person)       employers, schools and city that appear in
                                   both profiles, phrased as common-ground items
+  strength(me)                    how complete the profile is, and the one next
+                                  thing worth adding
 
 Exact matches beat a model here: a shared employer is either in both texts or
 it isn't, and a 1B model asked to judge it stretches ("both work in tech").
@@ -56,3 +58,28 @@ def shared_ground(me: Me, person: Candidate) -> list[str]:
     if city and person.location and _mentions(person.location, city):
         found.append(f"Both based in {city}")
     return found
+
+
+def strength(me: Me) -> tuple[float, str]:
+    """0-1, and the single next step that would help drafts most. An upload
+    alone lands around 60%. That's endowed progress: the meter starts partly
+    filled, and the remaining part is stories, the context drafts need most."""
+    score, hint = 0.0, ""
+    if me.name and me.headline:
+        score += 0.15
+    if me.entries:
+        score += 0.25
+    if me.skills:
+        score += 0.1
+    if me.education:
+        score += 0.1
+    if me.entries:
+        with_story = [e for e in me.entries if e.story.strip()]
+        score += 0.4 * len(with_story) / len(me.entries)
+        missing = next((e for e in me.entries if not e.story.strip()), None)
+        if missing:
+            hint = (f"Add the story behind **{missing.label}**: the problem, the decision you made, the "
+                    f"result. Drafts that use it can then say why it matters, not just that it happened.")
+    if not hint and not me.entries:
+        hint = "Add a job or project - credibility items come from them."
+    return min(score, 1.0), hint

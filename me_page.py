@@ -22,6 +22,7 @@ from pathlib import Path
 import streamlit as st
 
 from llm import describe, is_local, vendor
+from profile_match import strength
 from schemas import Certification, Education, Entry, Me
 from sources.resume import ResumeUnreadable, build_profile, read_text
 from store import load_me
@@ -62,33 +63,6 @@ def _text(label: str, obj, attr: str, key: str, area: bool = False, **kw) -> Non
     _bind(key, getattr(obj, attr), lambda v: setattr(obj, attr, v.strip()))
     widget = st.text_area if area else st.text_input
     widget(label, key=key, on_change=_changed, args=(key,), **kw)
-
-
-# --- How complete the profile is ----------------------------------------------------
-
-def strength(me: Me) -> tuple[float, str]:
-    """0-1, and the single next step that would help drafts most. An upload
-    alone lands around 60%. That's endowed progress: the meter starts partly
-    filled, and the remaining part is stories, the context drafts need most."""
-    score, hint = 0.0, ""
-    if me.name and me.headline:
-        score += 0.15
-    if me.entries:
-        score += 0.25
-    if me.skills:
-        score += 0.1
-    if me.education:
-        score += 0.1
-    if me.entries:
-        with_story = [e for e in me.entries if e.story.strip()]
-        score += 0.4 * len(with_story) / len(me.entries)
-        missing = next((e for e in me.entries if not e.story.strip()), None)
-        if missing:
-            hint = (f"Add the story behind **{missing.label}**: the problem, the decision you made, the "
-                    f"result. Drafts that use it can then say why it matters, not just that it happened.")
-    if not hint and not me.entries:
-        hint = "Add a job or project - credibility items come from them."
-    return min(score, 1.0), hint
 
 
 # --- Upload ----------------------------------------------------------------------------

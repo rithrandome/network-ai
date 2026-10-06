@@ -59,6 +59,8 @@ CHANNEL = Setting("channel", "Channel", ["LinkedIn note", "InMail", "Email"])
 TONE = Setting("tone", "Tone", ["Warm", "Professional", "Concise"])
 
 SETTINGS = [GOAL, THEIR_ROLE, STATUS, CHANNEL, TONE]
+# Settings that take a typed value besides their options.
+CUSTOM_OK = {"goal", "their_role", "tone"}
 
 CHANNELS = {
     # Free LinkedIn accounts get 200 characters for a connection note.
